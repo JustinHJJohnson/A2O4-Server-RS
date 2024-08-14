@@ -1,0 +1,11 @@
+[package]
+name = "a2o4-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+reqwest = { version = "0.12.5", features = ["blocking"] }
+scraper = "0.19.0"
+strum = "0.26.3"
+strum_macros = "0.26.4"
