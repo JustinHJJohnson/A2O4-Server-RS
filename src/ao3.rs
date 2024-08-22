@@ -3,8 +3,8 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
-use scraper::{Html, Selector};
-use anyhow::Result;
+use scraper::{ElementRef, Html, Selector};
+use anyhow::{Error, Result};
 use strum_macros::{Display, EnumString};
 use reqwest;
 
@@ -27,14 +27,14 @@ pub struct Work {
     relationships: Vec<String>,
     characters: Vec<String>,
     additional_tags: Vec<String>,
-    part_in_series: Option<u8>
+    series: Option<Vec<SeriesLink>>
 }
 
 impl std::fmt::Display for Work {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "id: {},\ntitle: {},\nauthor: {},\ndownload_links: {:?},\nfandoms: {:?},\nrelationships: {:?},\ncharacters: {:?},\nadditional_tags: {:?}\npart_in_series: {:?}",
+            "id: {},\ntitle: {},\nauthor: {},\ndownload_links: {:?},\nfandoms: {:?},\nrelationships: {:?},\ncharacters: {:?},\nadditional_tags: {:?}\nseries: {:?}",
             self.id,
             self.title,
             self.author,
@@ -43,9 +43,15 @@ impl std::fmt::Display for Work {
             self.relationships,
             self.characters,
             self.additional_tags,
-            self.part_in_series
+            self.series
         )
     }
+}
+
+#[derive(Debug)]
+pub struct SeriesLink {
+    series_id: String,
+    part_in_series: u8
 }
 
 pub struct Series {
@@ -116,10 +122,11 @@ pub fn parse_work(id: &str) -> Result<Work> {
     let relationships_selector = Selector::parse("dd.relationship.tags>ul>li>a").unwrap();
     let characters_selector = Selector::parse("dd.character.tags>ul>li>a").unwrap();
     let additional_tags_selector = Selector::parse("dd.freeform.tags>ul>li>a").unwrap();
-    let part_in_series_selector = Selector::parse("span.position").unwrap();
+    let part_in_series_selector = Selector::parse("dd.series>span.series>span.position").unwrap();
 
     if document.select(&error_header_selector).next().unwrap().text().collect::<String>() == "Sorry!" {
-        println!("Error\n{}", document.select(&error_message_selector).next().unwrap().text().collect::<String>());
+        eprintln!("Error\n{}", document.select(&error_message_selector).next().unwrap().text().collect::<String>());
+        return Err(Error::msg("Error loading work"));
     }
     
     let title: String = document.select(&title_selector).next().unwrap().text().collect();
@@ -135,13 +142,22 @@ pub fn parse_work(id: &str) -> Result<Work> {
     let relationships: Vec<String> = document.select(&relationships_selector).map(|x| x.text().collect()).collect();
     let characters: Vec<String> = document.select(&characters_selector).map(|x| x.text().collect()).collect();
     let additional_tags: Vec<String> = document.select(&additional_tags_selector).map(|x| x.text().collect()).collect();
-    let part_element = document.select(&part_in_series_selector).next();
-    let part_in_series: Option<u8> = if part_element != None {
-        let part_string: String = part_element.unwrap().text().collect();
-        Some(part_string.split_whitespace().skip(1).next().unwrap().parse().unwrap())
-    } else {
-        None
-    };
+    let series_element = document.select(&part_in_series_selector);
+    let series_links: Option<Vec<SeriesLink>> = series_element
+        .map(|series| (
+            Some(SeriesLink {
+                part_in_series: series
+                    .text()
+                    .collect::<String>()
+                    .split_whitespace()
+                    .skip(1).next().unwrap()
+                    .parse::<u8>().unwrap(),
+                series_id: series
+                    .child_elements().next().unwrap()
+                    .value().attr("href").unwrap()
+                    .split_terminator("/").skip(2).next().unwrap().to_owned()
+            })
+        )).collect();
 
     Ok(Work {
         id: id.to_owned(),
@@ -152,7 +168,7 @@ pub fn parse_work(id: &str) -> Result<Work> {
         relationships,
         characters,
         additional_tags,
-        part_in_series
+        series: series_links
     })
 }
 
