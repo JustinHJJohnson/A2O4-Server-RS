@@ -7,8 +7,9 @@ use scraper::{ElementRef, Html, Selector};
 use anyhow::{Error, Result};
 use strum_macros::{Display, EnumString};
 use reqwest;
+use enum_iterator::Sequence;
 
-#[derive(Debug, EnumString, PartialEq, Eq, Hash, Display)]
+#[derive(Debug, EnumString, PartialEq, Eq, Hash, Display, Sequence, Clone, Copy)]
 pub enum DownloadFormat {
     AZW3,
     EPUB,
@@ -172,6 +173,62 @@ pub fn parse_work(id: &str) -> Result<Work> {
     })
 }
 
+pub fn parse_work_from_blurb(blurb: ElementRef) -> Result<Work> {
+    let heading_selector = Selector::parse("h4.heading>a").unwrap();
+    let fandoms_selector = Selector::parse("h5.fandoms.heading>a.tag").unwrap();
+    let relationships_selector = Selector::parse("li.relationships>a.tag").unwrap();
+    let characters_selector = Selector::parse("li.characters>a.tag").unwrap();
+    let additional_tags_selector = Selector::parse("li.freeforms>a.tag").unwrap();
+    let series_selector = Selector::parse("ul.series>li").unwrap();
+    
+    let mut heading = blurb.select(&heading_selector);
+    let title_element = heading.next().unwrap();
+    let id: String = title_element.attr("href").unwrap().split_terminator("/").skip(2).next().unwrap().to_owned();
+    let title: String = title_element.text().collect();
+    let author: String = heading.next().unwrap().text().collect();
+    let download_links: HashMap<DownloadFormat, String> = enum_iterator::all::<DownloadFormat>()
+        .map(|download_format| (
+            (
+                download_format,
+                format!("https://download.archiveofourown.org/downloads/{}/work.{}", id, download_format.to_string().to_lowercase())
+            )
+        )).collect();
+    let fandoms: Vec<String> = blurb.select(&fandoms_selector)
+        .map(|fandom| fandom.text().collect()).collect();
+    let relationships: Vec<String> = blurb.select(&relationships_selector)
+        .map(|relationship| relationship.text().collect()).collect();
+    let characters: Vec<String> = blurb.select(&characters_selector)
+        .map(|character| character.text().collect()).collect();
+    let additional_tags: Vec<String> = blurb.select(&additional_tags_selector)
+        .map(|tag| tag.text().collect()).collect();
+    let series_element = blurb.select(&series_selector);
+    let series_links: Option<Vec<SeriesLink>> = series_element
+        .map(|series| ({
+            let mut elements = series.child_elements();
+            Some(SeriesLink {
+                part_in_series: elements.next().unwrap()
+                    .text()
+                    .collect::<String>()
+                    .parse::<u8>().unwrap(),
+                series_id: elements.next().unwrap()
+                    .value().attr("href").unwrap()
+                    .split_terminator("/").skip(2).next().unwrap().to_owned()
+            })
+        })).collect();
+
+    Ok(Work {
+        id: id.to_owned(),
+        title: title.trim().to_owned(),
+        author,
+        download_links,
+        fandoms,
+        relationships,
+        characters,
+        additional_tags,
+        series: series_links
+    })
+}
+
 pub fn parse_series(id: &str) -> Result<Series> {
     let mut document = get_page(id, Some(1)).expect("Failed to get the requested page");
     
@@ -231,7 +288,7 @@ pub fn parse_series(id: &str) -> Result<Series> {
         for work in document.select(&work_selector) {
             let work_id = work.value().attr("id").unwrap().chars().skip(5).collect::<String>();
             println!("loading work {work_id}");
-            let parsed_work = parse_work(&work_id).unwrap();
+            let parsed_work = parse_work_from_blurb(work).unwrap();
             fandoms.extend(parsed_work.fandoms.clone());
             authors.insert(parsed_work.author.clone());
             works.push(parsed_work);
