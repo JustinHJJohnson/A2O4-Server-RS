@@ -1,4 +1,5 @@
 use crate::ao3::common::{get_page, DownloadFormat};
+use crate::ao3::user::User;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -6,7 +7,6 @@ use std::io::prelude::*;
 use std::str::FromStr;
 use std::path::PathBuf;
 use scraper::{ElementRef, Selector};
-use reqwest;
 use anyhow::{Error, Result};
 
 #[derive(Debug)]
@@ -20,7 +20,6 @@ pub struct Work {
     characters: Vec<String>,
     additional_tags: Vec<String>,
     series: HashMap<String, u8>
-    //series: Option<Vec<SeriesLink>>
 }
 
 impl std::fmt::Display for Work {
@@ -60,8 +59,8 @@ impl Work {
         self.series.get(series_id)
     }
 
-    pub fn parse_work(&self, id: &str) -> Result<Work> {
-        let document = get_page(id,None).expect("Failed to get the requested page");
+    pub fn parse_work(id: &str, user: Option<&User>) -> Result<Work> {
+        let document = get_page(id,None, user).expect("Failed to get the requested page");
         
         let error_header_selector = Selector::parse("h3.heading").unwrap();
         let error_message_selector = Selector::parse("div#signin>p").unwrap();
@@ -176,7 +175,7 @@ impl Work {
         })
     }
 
-    pub fn download_work(&self, mut file: PathBuf, format: DownloadFormat, series: bool, series_id: &String) -> std::io::Result<()> {
+    pub fn download(&self, mut file: PathBuf, format: DownloadFormat, series: bool, series_id: &String) -> std::io::Result<()> {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {}", download_link);
         let work_file = reqwest::blocking::get(download_link).unwrap().bytes().unwrap();

@@ -1,3 +1,5 @@
+use crate::ao3::user::User;
+
 use scraper::Html;
 use anyhow::Result;
 use reqwest;
@@ -13,17 +15,23 @@ pub enum DownloadFormat {
     HTML
 }
 
-pub fn get_page(id: &str, page:Option<u8>) -> Result<Html> {
-    let url = if page == None {
-        format!("https://archiveofourown.org/works/{id}")
-    } else {
+pub fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html> {
+    let url = if let Some(i) = page {
         format!(
             "https://archiveofourown.org/series/{}?page={}",
             id,
-            page.unwrap()
+            i
         )
+    } else {
+        format!("https://archiveofourown.org/works/{id}")
     };
-    let response = reqwest::blocking::get(url);
+
+    let response = if let Some(i) = user {
+        i.get_client().get(url).send()
+    } else {
+        reqwest::blocking::get(url)
+    };
+
     let html_content = response?.text()?;
     Ok(Html::parse_document(&html_content))
 }

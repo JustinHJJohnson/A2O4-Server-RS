@@ -1,4 +1,5 @@
 use crate::ao3::work::Work;
+use crate::ao3::user::User;
 use crate::ao3::common::{get_page, DownloadFormat};
 
 use std::collections::HashSet;
@@ -48,8 +49,8 @@ impl std::fmt::Display for Series {
 }
 
 impl Series {
-    pub fn parse_series(id: &str) -> Result<Series> {
-        let mut document = get_page(id, Some(1)).expect("Failed to get the requested page");
+    pub fn parse_series(id: &str, user: Option<&User>) -> Result<Series> {
+        let mut document = get_page(id, Some(1), user).expect("Failed to get the requested page");
         
         let error_header_selector = Selector::parse("h3.heading").unwrap();
         let error_message_selector = Selector::parse("div#signin>p").unwrap();
@@ -103,7 +104,7 @@ impl Series {
         let mut fandoms = HashSet::new();
         
         for page in 1..=num_series_pages {
-            if page > 1 { document = get_page(id, Some(page)).unwrap() };
+            if page > 1 { document = get_page(id, Some(page), user).unwrap() };
             for work in document.select(&work_selector) {
                 let work_id = work.value().attr("id").unwrap().chars().skip(5).collect::<String>();
                 println!("loading work {work_id}");
@@ -135,7 +136,7 @@ impl Series {
         let series_path = path.join(&self.title);
         create_dir(&series_path)?;
         Ok(for work in &self.works {
-            let _ = work.download_work(series_path.clone(), format, true, &self.id);
+            let _ = work.download(series_path.clone(), format, true, &self.id);
         })
     }
 }

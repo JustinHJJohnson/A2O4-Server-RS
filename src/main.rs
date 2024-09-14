@@ -1,18 +1,23 @@
 mod ao3;
 
+use ao3::series::Series;
+use ao3::work::Work;
+use ao3::common::DownloadFormat;
+use ao3::user::User;
+
+use std::env::current_dir;
 use anyhow::Result;
 
 fn main() -> Result<()> {
-    //let work = ao3::parse_work("31751449").unwrap();
-    //let work = ao3::parse_work("33158737").unwrap(); //restricted work
-    let work = ao3::parse_work("555227").unwrap();
-    //let series = ao3::parse_series("2796217").unwrap();
-    //let series = ao3::parse_series("25849").unwrap();
+    //TODO setup config system and load user details from it
+    let user = User::new("username", "password");
+    
+    let download_path = current_dir().unwrap().join("downloads");
+    let series = Series::parse_series("12345678", Some(&user)).unwrap(); //restricted series
+    let _ = series.download(download_path, DownloadFormat::EPUB);
     //println!();
-    //println!("{}", series);
-    println!("{}", work);
-
-    //let _ = ao3::download_work(work, std::env::current_dir()?, ao3::DownloadFormat::EPUB);
+    println!("{}", series);
+    //println!("{}", work);
 
     Ok(())
 }
