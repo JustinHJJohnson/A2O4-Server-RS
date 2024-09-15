@@ -1,0 +1,46 @@
+# where to store downloaded works on the local machine
+download_path = '../test/downloads'
+
+# Used to access bookmarks and restricted works
+ao3_username = "username"
+ao3_password = "password"
+
+# list of devices to send works to
+[[devices]]
+name = "Kindle"
+ip = "127.0.0.1"
+port = 22
+username = "root"
+password = "root"
+download_folder = '/fanfics/sorted'
+uses_koreader = true                    # KOReader generates a metadata folder that needs to be cleaned up on deletes, omit if not using KOReader
+
+[[devices]]
+name = "Phone"
+ip = "127.0.0.2"
+port = 22
+username = "root"
+password = "root"
+download_folder = '/fanfics/sorted'
+uses_KOReader = false
+
+# maps fandom names
+[fandom_map]
+"Fallout 4" = "Fallout"
+"Fallout (Video Games)" = "Fallout"
+"Baldur's Gate (Video Games)" = "Baldur's Gate"
+"Cyberpunk 2077 (Video Game)" = "Cyberpunk 2077"
+"Cyberpunk & Cyberpunk 2020 (Roleplaying Games)" = "Cyberpunk 2077"
+"Persona 5" = "Persona"
+"Persona 4" = "Persona"
+"Persona 3" = "Persona"
+"Shin Megami Tensei Series" = "Shin Megami Tensei"
+"逆転裁判 | Gyakuten Saiban | Ace Attorney" = "Ace Attorney"
+"大逆転裁判 | Dai Gyakuten Saiban | The Great Ace Attorney Chronicles (Video Games)" = "Ace Attorney"
+"NieR = Automata (Video Game)" = "NieR"
+"Dungeons & Dragons (Roleplaying Game)" = "Dungeons & Dragons"
+
+# if a work/series has the fandom on the left, it will remove the fandoms on the right
+[fandom_filter]
+"Baldur's Gate" = ["Dungeons & Dragons"]
+"Persona" = ["Shin Megami Tensei"]

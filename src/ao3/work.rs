@@ -75,6 +75,7 @@ impl Work {
         let additional_tags_selector = Selector::parse("dd.freeform.tags>ul>li>a").unwrap();
         let part_in_series_selector = Selector::parse("dd.series>span.series>span.position").unwrap();
     
+        //TODO move page errors to common.rs and also check for a 404 error
         if document.select(&error_header_selector).next().unwrap().text().collect::<String>() == "Sorry!" {
             eprintln!("Error\n{}", document.select(&error_message_selector).next().unwrap().text().collect::<String>());
             return Err(Error::msg("Error loading work"));
