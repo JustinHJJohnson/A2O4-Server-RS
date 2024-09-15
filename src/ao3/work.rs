@@ -60,6 +60,7 @@ impl Work {
     }
 
     pub fn parse_work(id: &str, user: Option<&User>) -> Result<Work> {
+        println!("loading work {}", id);
         let document = get_page(id,None, user).expect("Failed to get the requested page");
         
         let error_header_selector = Selector::parse("h3.heading").unwrap();
@@ -106,6 +107,8 @@ impl Work {
                     .skip(1).next().unwrap()
                     .parse::<u8>().unwrap()
             )).collect();
+
+        println!("Work loaded");
     
         Ok(Work {
             id: id.to_owned(),
@@ -132,6 +135,9 @@ impl Work {
         let title_element = heading.next().unwrap();
         let id: String = title_element.attr("href").unwrap().split_terminator("/").skip(2).next().unwrap().to_owned();
         let title: String = title_element.text().collect();
+
+        println!("  Parsing work {} - {}", id, title);
+
         let author: String = heading.next().unwrap().text().collect();
         let download_links: HashMap<DownloadFormat, String> = enum_iterator::all::<DownloadFormat>()
             .map(|download_format| (
@@ -161,6 +167,8 @@ impl Work {
                     .split_terminator("/").skip(2).next().unwrap().to_owned();
                 (series_id, part_in_series)
             })).collect();
+
+        println!("  Work parsed\n");
     
         Ok(Work {
             id: id.to_owned(),

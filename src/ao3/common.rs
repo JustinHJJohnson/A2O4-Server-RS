@@ -27,7 +27,7 @@ pub fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html>
     };
 
     let response = if let Some(i) = user {
-        i.get_client().get(url).send()
+        i.client.get(url).send()
     } else {
         reqwest::blocking::get(url)
     };

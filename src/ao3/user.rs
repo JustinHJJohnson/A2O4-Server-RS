@@ -10,6 +10,7 @@ pub struct User {
 
 impl User {
     pub fn new(username: &str, password: &str) -> Self {
+        println!("logging in");
         let client = Client::builder().cookie_store(true).build().unwrap();
     
         let html_content = client.get("https://archiveofourown.org/users/login").send().unwrap().text();
@@ -22,7 +23,9 @@ impl User {
             .form(&form_data)
             .send()
             .unwrap();
+        //TODO do error checking here on the response status
         //println!("{:?}", login_response.status());
+        println!("Successfully logged in\n");
         
         Self {
             username: username.to_owned(),
@@ -30,9 +33,5 @@ impl User {
             auth_token: auth_token.to_owned(),
             client
         }
-    }
-
-    pub fn get_client(&self) -> &Client {
-        &self.client
     }
 }

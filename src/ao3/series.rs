@@ -50,6 +50,7 @@ impl std::fmt::Display for Series {
 
 impl Series {
     pub fn parse_series(id: &str, user: Option<&User>) -> Result<Series> {
+        println!("Loading series {}", id);
         let mut document = get_page(id, Some(1), user).expect("Failed to get the requested page");
         
         let error_header_selector = Selector::parse("h3.heading").unwrap();
@@ -107,7 +108,7 @@ impl Series {
             if page > 1 { document = get_page(id, Some(page), user).unwrap() };
             for work in document.select(&work_selector) {
                 let work_id = work.value().attr("id").unwrap().chars().skip(5).collect::<String>();
-                println!("loading work {work_id}");
+                println!("  Found work {}", work_id);
                 let parsed_work = Work::parse_work_from_blurb(work).unwrap();
                 fandoms.extend(parsed_work.fandoms());
                 authors.insert(parsed_work.author());
