@@ -1,7 +1,7 @@
 use crate::ao3::user::User;
 
-use scraper::Html;
-use anyhow::Result;
+use scraper::{Html, Selector};
+use anyhow::{Error, Result};
 use reqwest;
 use strum_macros::{Display, EnumString};
 use enum_iterator::Sequence;
@@ -30,8 +30,21 @@ pub fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html>
         i.client.get(url).send()
     } else {
         reqwest::blocking::get(url)
-    };
+    }.unwrap();
 
-    let html_content = response?.text()?;
-    Ok(Html::parse_document(&html_content))
+    if response.url().as_str() == "https://archiveofourown.org/users/login?restricted=true" {
+        eprint!("This work/series is restricted and requires an AO3 account");
+        return Err(Error::msg("Restricted Error"));
+    }
+
+    let html_content = Html::parse_document(&response.text()?);
+
+    let error_404_selector = Selector::parse("h2.heading").unwrap();
+
+    if html_content.select(&error_404_selector).next().unwrap().text().collect::<String>() == "Error 404" {
+        eprintln!("This url does not lead to a valid work/series");
+        return Err(Error::msg("URL Error"));
+    }
+
+    Ok(html_content)
 }

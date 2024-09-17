@@ -53,9 +53,6 @@ impl Series {
         println!("Loading series {}", id);
         let mut document = get_page(id, Some(1), user).expect("Failed to get the requested page");
         
-        let error_header_selector = Selector::parse("h3.heading").unwrap();
-        let error_message_selector = Selector::parse("div#signin>p").unwrap();
-    
         let pagination_selector = Selector::parse("ol.pagination.actions>li").unwrap();
         let pagination_elements = document.select(&pagination_selector).count() as u8;
         let num_series_pages = if pagination_elements > 0 { pagination_elements / 2 - 2 } else { 1 };
@@ -69,10 +66,6 @@ impl Series {
         let completed_selector = Selector::parse("dl.stats>dd").unwrap();
         let bookmarks_selector = Selector::parse("dd.bookmarks>a").unwrap();
         let work_selector = Selector::parse("li.work.blurb").unwrap();
-    
-        if document.select(&error_header_selector).next().unwrap().text().collect::<String>() == "Sorry!" {
-            println!("Error\n{}", document.select(&error_message_selector).next().unwrap().text().collect::<String>());
-        }
     
         let mut series_date_select = document.select(&series_date_selector);
         series_date_select.next(); //Skip creator field to be picked up by different selector
@@ -138,6 +131,7 @@ impl Series {
         create_dir(&series_path)?;
         Ok(for work in &self.works {
             let _ = work.download(series_path.clone(), format, true, &self.id);
+            println!()
         })
     }
 }

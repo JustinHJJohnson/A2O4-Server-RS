@@ -63,9 +63,6 @@ impl Work {
         println!("loading work {}", id);
         let document = get_page(id,None, user).expect("Failed to get the requested page");
         
-        let error_header_selector = Selector::parse("h3.heading").unwrap();
-        let error_message_selector = Selector::parse("div#signin>p").unwrap();
-        
         let title_selector = Selector::parse("h2.title.heading").unwrap();
         let author_selector = Selector::parse("h3.byline.heading>a").unwrap();
         let downloads_selector = Selector::parse("li.download>ul>li>a").unwrap();
@@ -74,12 +71,6 @@ impl Work {
         let characters_selector = Selector::parse("dd.character.tags>ul>li>a").unwrap();
         let additional_tags_selector = Selector::parse("dd.freeform.tags>ul>li>a").unwrap();
         let part_in_series_selector = Selector::parse("dd.series>span.series>span.position").unwrap();
-    
-        //TODO move page errors to common.rs and also check for a 404 error
-        if document.select(&error_header_selector).next().unwrap().text().collect::<String>() == "Sorry!" {
-            eprintln!("Error\n{}", document.select(&error_message_selector).next().unwrap().text().collect::<String>());
-            return Err(Error::msg("Error loading work"));
-        }
         
         let title: String = document.select(&title_selector).next().unwrap().text().collect();
         let author: String = document.select(&author_selector).next().unwrap().text().collect();
