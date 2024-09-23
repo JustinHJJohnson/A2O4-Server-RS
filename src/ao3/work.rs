@@ -1,5 +1,6 @@
-use crate::ao3::common::{get_page, DownloadFormat};
+use crate::ao3::common::{get_page, DownloadFormat, filter_fandoms};
 use crate::ao3::user::User;
+use crate::config::Config;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -7,7 +8,7 @@ use std::io::prelude::*;
 use std::str::FromStr;
 use std::path::PathBuf;
 use scraper::{ElementRef, Selector};
-use anyhow::{Error, Result};
+use anyhow::Result;
 
 #[derive(Debug)]
 pub struct Work {
@@ -16,6 +17,7 @@ pub struct Work {
     author: String,
     download_links: HashMap<DownloadFormat, String>,
     fandoms: Vec<String>,
+    filtered_fandom: String,
     relationships: Vec<String>,
     characters: Vec<String>,
     additional_tags: Vec<String>,
@@ -26,12 +28,13 @@ impl std::fmt::Display for Work {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "id: {},\ntitle: {},\nauthor: {},\ndownload_links: {:?},\nfandoms: {:?},\nrelationships: {:?},\ncharacters: {:?},\nadditional_tags: {:?}\nseries: {:?}",
+            "id: {},\ntitle: {},\nauthor: {},\ndownload_links: {:?},\nfandoms: {:?},\nfiltered_fandoms: {:?},\nrelationships: {:?},\ncharacters: {:?},\nadditional_tags: {:?}\nseries: {:?}",
             self.id,
             self.title,
             self.author,
             self.download_links,
             self.fandoms,
+            self.filtered_fandom,
             self.relationships,
             self.characters,
             self.additional_tags,
@@ -59,7 +62,7 @@ impl Work {
         self.series.get(series_id)
     }
 
-    pub fn parse_work(id: &str, user: Option<&User>) -> Result<Work> {
+    pub fn parse_work(id: &str, user: Option<&User>, config: &Config) -> Result<Work> {
         println!("loading work {}", id);
         let document = get_page(id,None, user).expect("Failed to get the requested page");
         
@@ -107,7 +110,8 @@ impl Work {
             title: title.trim().to_owned(),
             author,
             download_links,
-            fandoms,
+            fandoms: fandoms.clone(),
+            filtered_fandom: filter_fandoms(&fandoms, config),
             relationships,
             characters,
             additional_tags,
@@ -115,7 +119,7 @@ impl Work {
         })
     }
 
-    pub fn parse_work_from_blurb(blurb: ElementRef) -> Result<Work> {
+    pub fn parse_work_from_blurb(blurb: ElementRef, config: &Config) -> Result<Work> {
         let heading_selector = Selector::parse("h4.heading>a").unwrap();
         let fandoms_selector = Selector::parse("h5.fandoms.heading>a.tag").unwrap();
         let relationships_selector = Selector::parse("li.relationships>a.tag").unwrap();
@@ -167,7 +171,8 @@ impl Work {
             title: title.trim().to_owned(),
             author,
             download_links,
-            fandoms,
+            fandoms: fandoms.clone(),
+            filtered_fandom: filter_fandoms(&fandoms, config),
             relationships,
             characters,
             additional_tags,

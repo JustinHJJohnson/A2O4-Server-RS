@@ -1,6 +1,7 @@
 use crate::ao3::work::Work;
 use crate::ao3::user::User;
-use crate::ao3::common::{get_page, DownloadFormat};
+use crate::ao3::common::{get_page, DownloadFormat, filter_fandoms};
+use crate::config::Config;
 
 use std::collections::HashSet;
 use std::fs::create_dir;
@@ -23,14 +24,15 @@ pub struct Series {
     //These are gotten from parsing all the works in the series
     works: Vec<Work>,
     authors: HashSet<String>,
-    fandoms: HashSet<String>
+    fandoms: HashSet<String>,
+    filtered_fandom: String
 }
 
 impl std::fmt::Display for Series {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "id: {}\ntitle: {}\ncreator: {}\nseries_begun: {}\nseries_updated: {}\ndescription: {}\nnum_words: {}\nnum_works: {}\nis_completed: {}\nnum_bookmarks: {}\nworks: {:?}\nauthors: {:?}\nfandoms: {:?}",
+            "id: {}\ntitle: {}\ncreator: {}\nseries_begun: {}\nseries_updated: {}\ndescription: {}\nnum_words: {}\nnum_works: {}\nis_completed: {}\nnum_bookmarks: {}\nworks: {:?}\nauthors: {:?}\nfandoms: {:?}\nfiltered_fandoms: {:?}",
             self.id,
             self.title,
             self.creator,
@@ -43,13 +45,14 @@ impl std::fmt::Display for Series {
             self.num_bookmarks,
             self.works,
             self.authors,
-            self.fandoms
+            self.fandoms,
+            self.filtered_fandom
         )
     }
 }
 
 impl Series {
-    pub fn parse_series(id: &str, user: Option<&User>) -> Result<Series> {
+    pub fn parse_series(id: &str, user: Option<&User>, config: &Config) -> Result<Series> {
         println!("Loading series {}", id);
         let mut document = get_page(id, Some(1), user).expect("Failed to get the requested page");
         
@@ -102,7 +105,7 @@ impl Series {
             for work in document.select(&work_selector) {
                 let work_id = work.value().attr("id").unwrap().chars().skip(5).collect::<String>();
                 println!("  Found work {}", work_id);
-                let parsed_work = Work::parse_work_from_blurb(work).unwrap();
+                let parsed_work = Work::parse_work_from_blurb(work, config).unwrap();
                 fandoms.extend(parsed_work.fandoms());
                 authors.insert(parsed_work.author());
                 works.push(parsed_work);
@@ -122,7 +125,8 @@ impl Series {
             num_bookmarks,
             works,
             authors,
-            fandoms
+            fandoms: fandoms.clone(),
+            filtered_fandom: filter_fandoms(&Vec::from_iter(fandoms), config)
         })
     }
     
