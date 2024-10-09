@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 use std::str::FromStr;
-use std::path::PathBuf;
+use std::path::Path;
 use scraper::{ElementRef, Selector};
 use anyhow::Result;
 
@@ -21,7 +21,7 @@ pub struct Work {
     relationships: Vec<String>,
     characters: Vec<String>,
     additional_tags: Vec<String>,
-    series: HashMap<String, u8>
+    series: HashMap<String, SeriesLink>
 }
 
 impl std::fmt::Display for Work {
@@ -43,9 +43,10 @@ impl std::fmt::Display for Work {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SeriesLink {
     pub series_id: String,
+    pub series_name: String,
     pub part_in_series: u8
 }
 
@@ -58,8 +59,16 @@ impl Work {
         self.author.clone()
     }
 
-    pub fn get_part_in_series(&self, series_id: &String) -> Option<&u8> {
+    pub fn get_series_link(&self, series_id: &String) -> Option<&SeriesLink> {
         self.series.get(series_id)
+    }
+
+    pub fn get_filename(&self, format: DownloadFormat, series_id: Option<&String>) -> String {
+        if series_id != None && self.get_series_link(series_id.unwrap()) != None {
+            format!("{} - {}.{}", self.get_series_link(series_id.unwrap()).unwrap().part_in_series, self.title, format.to_string().to_lowercase())
+        } else {
+            format!("{}.{}", self.title, format.to_string().to_lowercase())
+        }
     }
 
     pub fn parse_work(id: &str, user: Option<&User>, config: &Config) -> Result<Work> {
@@ -89,19 +98,32 @@ impl Work {
         let characters: Vec<String> = document.select(&characters_selector).map(|x| x.text().collect()).collect();
         let additional_tags: Vec<String> = document.select(&additional_tags_selector).map(|x| x.text().collect()).collect();
         let series_element = document.select(&part_in_series_selector);
-        let series_links: HashMap<String, u8> = series_element
-            .map(|series| (
-                series
-                    .child_elements().next().unwrap()
+        let series_links: HashMap<String, SeriesLink> = series_element
+            .map(|series| {
+                let series_name_element = series.child_elements().next().unwrap();
+                let series_id = series_name_element
                     .value().attr("href").unwrap()
-                    .split_terminator("/").skip(2).next().unwrap().to_owned(),
-                series
-                    .text()
-                    .collect::<String>()
-                    .split_whitespace()
-                    .skip(1).next().unwrap()
-                    .parse::<u8>().unwrap()
-            )).collect();
+                    .split_terminator("/").skip(2).next().unwrap().to_owned();
+                
+                
+                (
+                    series_id.clone(),
+                    SeriesLink{
+                        series_name: series_name_element
+                            .text().collect::<String>()
+                            .split_whitespace()
+                            .filter(|chunk| *chunk != "series")
+                            .collect::<Vec<&str>>().join(" "),
+                        series_id: series_id,
+                        part_in_series: series
+                            .text()
+                            .collect::<String>()
+                            .split_whitespace()
+                            .skip(1).next().unwrap()
+                            .parse::<u8>().unwrap()
+                    }
+                )
+            }).collect();
 
         println!("Work loaded");
     
@@ -119,7 +141,7 @@ impl Work {
         })
     }
 
-    pub fn parse_work_from_blurb(blurb: ElementRef, config: &Config) -> Result<Work> {
+    pub fn parse_work_from_blurb(blurb: ElementRef, series_name: &String, config: &Config) -> Result<Work> {
         let heading_selector = Selector::parse("h4.heading>a").unwrap();
         let fandoms_selector = Selector::parse("h5.fandoms.heading>a.tag").unwrap();
         let relationships_selector = Selector::parse("li.relationships>a.tag").unwrap();
@@ -151,7 +173,7 @@ impl Work {
         let additional_tags: Vec<String> = blurb.select(&additional_tags_selector)
             .map(|tag| tag.text().collect()).collect();
         let series_element = blurb.select(&series_selector);
-        let series_links: HashMap<String, u8> = series_element
+        let series_links: HashMap<String, SeriesLink> = series_element
             .map(|series| ({
                 let mut elements = series.child_elements();
                 let part_in_series = elements.next().unwrap()
@@ -161,7 +183,11 @@ impl Work {
                 let series_id = elements.next().unwrap()
                     .value().attr("href").unwrap()
                     .split_terminator("/").skip(2).next().unwrap().to_owned();
-                (series_id, part_in_series)
+                
+                (
+                    series_id.clone(),
+                    SeriesLink{ series_name: series_name.clone(), series_id, part_in_series }
+                )
             })).collect();
 
         println!("  Work parsed\n");
@@ -180,20 +206,17 @@ impl Work {
         })
     }
 
-    pub fn download(&self, mut file: PathBuf, format: DownloadFormat, series: bool, series_id: &String) -> std::io::Result<()> {
+    pub fn download(&self, download_folder: &Path, format: DownloadFormat, series_id: Option<&String>) -> std::io::Result<()> {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {}", download_link);
-        let work_file = reqwest::blocking::get(download_link).unwrap().bytes().unwrap();
-        if series {
-            file.push(format!("{} - {}.{}", self.get_part_in_series(series_id).unwrap(), self.title, format.to_string().to_lowercase()))
-        } else {
-            file.push(format!("{}.{}", self.title, format.to_string().to_lowercase()));
-        }
+
+        let work = reqwest::blocking::get(download_link).unwrap().bytes().unwrap();
+        let download_path = download_folder.join(self.get_filename(format, series_id));
         
-        println!("Downloading to: {}", file.to_str().unwrap());
+        println!("Downloading to: {}", download_folder.to_str().unwrap());
         
-        let mut file = File::create(file)?;
-        file.write_all(&work_file)?;
+        let mut work_file = File::create(download_path)?;
+        work_file.write_all(&work)?;
         Ok(())
     }
 }

@@ -5,7 +5,7 @@ use crate::config::Config;
 
 use std::collections::HashSet;
 use std::fs::create_dir;
-use std::path::PathBuf;
+use std::path::Path;
 use scraper::Selector;
 use anyhow::Result;
 
@@ -73,7 +73,7 @@ impl Series {
         let mut series_date_select = document.select(&series_date_selector);
         series_date_select.next(); //Skip creator field to be picked up by different selector
         
-        let title: String = document.select(&title_selector).next().unwrap().text().collect::<String>().trim().to_owned();
+        let title: String = document.select(&title_selector).next().unwrap().text().collect::<String>().split_whitespace().filter(|chunk| *chunk != "series").collect::<Vec<&str>>().join(" ");
         let creator: String = document.select(&creator_selector).next().unwrap().text().collect();
         let series_begun: String = series_date_select.next().unwrap().text().collect();
         let series_updated: String = series_date_select.next().unwrap().text().collect();
@@ -105,7 +105,7 @@ impl Series {
             for work in document.select(&work_selector) {
                 let work_id = work.value().attr("id").unwrap().chars().skip(5).collect::<String>();
                 println!("  Found work {}", work_id);
-                let parsed_work = Work::parse_work_from_blurb(work, config).unwrap();
+                let parsed_work = Work::parse_work_from_blurb(work, &title, config).unwrap();
                 fandoms.extend(parsed_work.fandoms());
                 authors.insert(parsed_work.author());
                 works.push(parsed_work);
@@ -130,11 +130,11 @@ impl Series {
         })
     }
     
-    pub fn download(&self, path: PathBuf, format: DownloadFormat) -> std::io::Result<()> {
+    pub fn download(&self, path: &Path, format: DownloadFormat) -> std::io::Result<()> {
         let series_path = path.join(&self.title);
         create_dir(&series_path)?;
         Ok(for work in &self.works {
-            let _ = work.download(series_path.clone(), format, true, &self.id);
+            let _ = work.download(&series_path, format, Some(&self.id));
             println!()
         })
     }
