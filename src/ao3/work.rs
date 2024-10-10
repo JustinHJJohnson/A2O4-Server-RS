@@ -17,7 +17,7 @@ pub struct Work {
     author: String,
     download_links: HashMap<DownloadFormat, String>,
     fandoms: Vec<String>,
-    filtered_fandom: String,
+    pub filtered_fandom: String,
     relationships: Vec<String>,
     characters: Vec<String>,
     additional_tags: Vec<String>,
@@ -82,15 +82,20 @@ impl Work {
         println!("loading work {}", id);
         let document = get_page(id, None, user).expect("Failed to get the requested page");
 
-        let title_selector = Selector::parse("h2.title.heading").unwrap();
-        let author_selector = Selector::parse("h3.byline.heading>a").unwrap();
-        let downloads_selector = Selector::parse("li.download>ul>li>a").unwrap();
-        let fandoms_selector = Selector::parse("dd.fandom.tags>ul>li>a").unwrap();
-        let relationships_selector = Selector::parse("dd.relationship.tags>ul>li>a").unwrap();
-        let characters_selector = Selector::parse("dd.character.tags>ul>li>a").unwrap();
-        let additional_tags_selector = Selector::parse("dd.freeform.tags>ul>li>a").unwrap();
-        let part_in_series_selector =
-            Selector::parse("dd.series>span.series>span.position").unwrap();
+        let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
+        let author_selector = Selector::parse("h3.byline.heading>a").expect("Error parsing author");
+        let downloads_selector =
+            Selector::parse("li.download>ul>li>a").expect("Error parsing download links");
+        let fandoms_selector =
+            Selector::parse("dd.fandom.tags>ul>li>a").expect("Error parsing fandom tags");
+        let relationships_selector = Selector::parse("dd.relationship.tags>ul>li>a")
+            .expect("Error parsing relationship tags");
+        let characters_selector =
+            Selector::parse("dd.character.tags>ul>li>a").expect("Error parsing character tags");
+        let additional_tags_selector =
+            Selector::parse("dd.freeform.tags>ul>li>a").expect("Error parsing additional tags");
+        let part_in_series_selector = Selector::parse("dd.series>span.series>span.position")
+            .expect("Error parsing part in series");
 
         let title: String = document
             .select(&title_selector)
@@ -157,7 +162,7 @@ impl Work {
                             .filter(|chunk| *chunk != "series")
                             .collect::<Vec<&str>>()
                             .join(" "),
-                        series_id: series_id,
+                        series_id,
                         part_in_series: series
                             .text()
                             .collect::<String>()
@@ -193,12 +198,16 @@ impl Work {
         series_name: &String,
         config: &Config,
     ) -> Result<Work> {
-        let heading_selector = Selector::parse("h4.heading>a").unwrap();
-        let fandoms_selector = Selector::parse("h5.fandoms.heading>a.tag").unwrap();
-        let relationships_selector = Selector::parse("li.relationships>a.tag").unwrap();
-        let characters_selector = Selector::parse("li.characters>a.tag").unwrap();
-        let additional_tags_selector = Selector::parse("li.freeforms>a.tag").unwrap();
-        let series_selector = Selector::parse("ul.series>li").unwrap();
+        let heading_selector = Selector::parse("h4.heading>a").expect("Error parsing heading");
+        let fandoms_selector =
+            Selector::parse("h5.fandoms.heading>a.tag").expect("Error parsing fandom tags");
+        let relationships_selector =
+            Selector::parse("li.relationships>a.tag").expect("Error parsing relationship tags");
+        let characters_selector =
+            Selector::parse("li.characters>a.tag").expect("Error parsing character tags");
+        let additional_tags_selector =
+            Selector::parse("li.freeforms>a.tag").expect("Error parsing additional tags");
+        let series_selector = Selector::parse("ul.series>li").expect("Error parsing series");
 
         let mut heading = blurb.select(&heading_selector);
         let title_element = heading.next().unwrap();
@@ -247,36 +256,34 @@ impl Work {
         let series_element = blurb.select(&series_selector);
         let series_links: HashMap<String, SeriesLink> = series_element
             .map(|series| {
-                {
-                    let mut elements = series.child_elements();
-                    let part_in_series = elements
-                        .next()
-                        .unwrap()
-                        .text()
-                        .collect::<String>()
-                        .parse::<u8>()
-                        .unwrap();
-                    let series_id = elements
-                        .next()
-                        .unwrap()
-                        .value()
-                        .attr("href")
-                        .unwrap()
-                        .split_terminator("/")
-                        .skip(2)
-                        .next()
-                        .unwrap()
-                        .to_owned();
+                let mut elements = series.child_elements();
+                let part_in_series = elements
+                    .next()
+                    .unwrap()
+                    .text()
+                    .collect::<String>()
+                    .parse::<u8>()
+                    .unwrap();
+                let series_id = elements
+                    .next()
+                    .unwrap()
+                    .value()
+                    .attr("href")
+                    .unwrap()
+                    .split_terminator("/")
+                    .skip(2)
+                    .next()
+                    .unwrap()
+                    .to_owned();
 
-                    (
-                        series_id.clone(),
-                        SeriesLink {
-                            series_name: series_name.clone(),
-                            series_id,
-                            part_in_series,
-                        },
-                    )
-                }
+                (
+                    series_id.clone(),
+                    SeriesLink {
+                        series_name: series_name.clone(),
+                        series_id,
+                        part_in_series,
+                    },
+                )
             })
             .collect();
 

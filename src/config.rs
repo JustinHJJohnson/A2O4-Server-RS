@@ -28,7 +28,7 @@ pub struct Device {
 pub fn read_config() -> Config {
     let mut file = File::open("config.toml").unwrap();
     let mut file_contents = String::new();
-    let _ = file.read_to_string(&mut file_contents); //TODO handle error
+    let _ = file.read_to_string(&mut file_contents); // TODO handle error
     let config: Config = toml::from_str(&file_contents).unwrap();
-    return config;
+    config
 }

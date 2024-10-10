@@ -38,7 +38,7 @@ impl User {
             .form(&form_data)
             .send()
             .unwrap();
-        //TODO do error checking here on the response status
+        // TODO do error checking here on the response status
         //println!("{:?}", login_response.status());
         println!("Successfully logged in\n");
 
