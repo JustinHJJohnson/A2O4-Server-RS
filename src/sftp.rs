@@ -13,7 +13,7 @@ use std::{
     net::TcpStream,
 };
 
-pub fn upload_file(
+pub fn upload_work(
     work: &Work,
     device: &Device,
     config: &Config,
@@ -30,11 +30,11 @@ pub fn upload_file(
     };
 
     let filename = work.get_filename(download_format, series_id);
-    let file_path = if series_id != None {
+    let file_path = if let Some(unwrapped_series_id) = series_id {
         Path::new(&config.download_path)
             .join(
                 &work
-                    .get_series_link(series_id.unwrap())
+                    .get_series_link(unwrapped_series_id)
                     .unwrap()
                     .series_name,
             )
@@ -46,19 +46,18 @@ pub fn upload_file(
     let mut file = File::open(file_path).unwrap();
     let mut file_contents = Vec::new();
     file.read_to_end(&mut file_contents).unwrap();
-
-    println!();
+    
     println!("Starting to upload file: {}", &filename);
     let file_length = file_contents.len();
     println!("file is {} bytes", file_length);
 
     let remote_download_folder = Path::new(&device.download_folder);
-    let remote_file_path = if series_id != None {
+    let remote_file_path = if let Some(unwrapped_series_id) = series_id {
         remote_download_folder
             .join(&work.filtered_fandom)
             .join(
                 &work
-                    .get_series_link(series_id.unwrap())
+                    .get_series_link(unwrapped_series_id)
                     .unwrap()
                     .series_name,
             )
@@ -70,13 +69,16 @@ pub fn upload_file(
     };
 
     if !using_existing_connection {
-        create_missing_folders_on_remote(sftp, &remote_file_path, remote_download_folder);
+        create_missing_folders_on_remote(
+            sftp,
+            remote_file_path.parent().unwrap(),
+            remote_download_folder,
+        );
     }
 
     let mut remote_file = sftp.create(Path::new(&remote_file_path)).unwrap();
 
-    let chunk_size = 20000;
-    let mut counter = 1;
+    let chunk_size = 15000;
 
     let pb = ProgressBar::new(file_length.try_into().unwrap());
     pb.set_style(
@@ -87,13 +89,12 @@ pub fn upload_file(
             .progress_chars("##-")
     );
 
-    for chunk in file_contents.chunks(chunk_size) {
+    for (i, chunk) in file_contents.chunks(chunk_size).enumerate() {
         remote_file.write_all(chunk).unwrap();
-        counter += 1;
-        pb.set_position(min(counter * chunk_size, file_length).try_into().unwrap());
+        pb.set_position(min(i * chunk_size, file_length).try_into().unwrap());
     }
 
-    pb.finish_with_message("Finished writing file");
+    pb.finish_with_message("Finished writing file\n");
 }
 
 pub fn upload_series(
@@ -111,12 +112,12 @@ pub fn upload_series(
     create_missing_folders_on_remote(
         &sftp,
         &remote_series_folder,
-        &Path::new(&device.download_folder),
+        Path::new(&device.download_folder),
     );
 
     for work in &series.works {
-        upload_file(
-            &work,
+        upload_work(
+            work,
             device,
             config,
             download_format,
@@ -141,8 +142,6 @@ fn create_missing_folders_on_remote(
     for path in remote_file_iterator {
         if sftp.lstat(path).is_err() {
             let _ = sftp.mkdir(path, 0); // TODO handle this error
-        } else {
-            break;
         }
     }
 }

@@ -27,8 +27,7 @@ pub fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html>
         i.client.get(url).send()
     } else {
         reqwest::blocking::get(url)
-    }
-    .unwrap();
+    }?;
 
     if response.url().as_str() == "https://archiveofourown.org/users/login?restricted=true" {
         eprint!("This work/series is restricted and requires an AO3 account");
@@ -78,7 +77,7 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
         }
     }
 
-    return if mapped_and_filtered_fandoms.len() > 1 {
+    if mapped_and_filtered_fandoms.len() > 1 {
         "Multiple".to_string()
     } else {
         mapped_and_filtered_fandoms
@@ -86,7 +85,7 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
             .next()
             .unwrap()
             .to_string()
-    };
+    }
 }
 
 #[cfg(test)]

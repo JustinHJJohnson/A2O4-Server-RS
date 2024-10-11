@@ -14,9 +14,9 @@ use std::str::FromStr;
 pub struct Work {
     id: String,
     title: String,
-    author: String,
+    pub author: String,
     download_links: HashMap<DownloadFormat, String>,
-    fandoms: Vec<String>,
+    pub fandoms: Vec<String>,
     pub filtered_fandom: String,
     relationships: Vec<String>,
     characters: Vec<String>,
@@ -51,20 +51,12 @@ pub struct SeriesLink {
 }
 
 impl Work {
-    pub fn fandoms(&self) -> Vec<String> {
-        self.fandoms.clone()
-    }
-
-    pub fn author(&self) -> String {
-        self.author.clone()
-    }
-
     pub fn get_series_link(&self, series_id: &String) -> Option<&SeriesLink> {
         self.series.get(series_id)
     }
 
     pub fn get_filename(&self, format: DownloadFormat, series_id: Option<&String>) -> String {
-        if series_id != None && self.get_series_link(series_id.unwrap()) != None {
+        if series_id.is_some() && self.get_series_link(series_id.unwrap()).is_some() {
             format!(
                 "{} - {}.{}",
                 self.get_series_link(series_id.unwrap())
@@ -147,8 +139,7 @@ impl Work {
                     .attr("href")
                     .unwrap()
                     .split_terminator("/")
-                    .skip(2)
-                    .next()
+                    .nth(2)
                     .unwrap()
                     .to_owned();
 
@@ -167,8 +158,7 @@ impl Work {
                             .text()
                             .collect::<String>()
                             .split_whitespace()
-                            .skip(1)
-                            .next()
+                            .nth(1)
                             .unwrap()
                             .parse::<u8>()
                             .unwrap(),
@@ -215,8 +205,7 @@ impl Work {
             .attr("href")
             .unwrap()
             .split_terminator("/")
-            .skip(2)
-            .next()
+            .nth(2)
             .unwrap()
             .to_owned();
         let title: String = title_element.text().collect();
@@ -271,8 +260,7 @@ impl Work {
                     .attr("href")
                     .unwrap()
                     .split_terminator("/")
-                    .skip(2)
-                    .next()
+                    .nth(2)
                     .unwrap()
                     .to_owned();
 

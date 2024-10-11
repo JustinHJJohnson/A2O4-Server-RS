@@ -121,8 +121,7 @@ impl Series {
             .collect();
         let raw_is_completed: String = document
             .select(&completed_selector)
-            .skip(2)
-            .next()
+            .nth(2)
             .unwrap()
             .text()
             .collect();
@@ -139,11 +138,11 @@ impl Series {
         let num_words: u32 = raw_num_words
             .replace(&[',', '.'][..], "")
             .parse()
-            .expect(format!("Failed to convert {} to u32", raw_num_words).as_str());
+            .unwrap_or_else(|_| panic!("Failed to convert {} to u32", raw_num_words));
         let num_works: u32 = raw_num_works
             .replace(&[',', '.'][..], "")
             .parse()
-            .expect(format!("Failed to convert {} to u32", raw_num_works).as_str());
+            .unwrap_or_else(|_| panic!("Failed to convert {} to u32", raw_num_works));
         let is_completed: bool = match raw_is_completed.as_str() {
             "Yes" => true,
             "No" => false,
@@ -152,7 +151,7 @@ impl Series {
         let num_bookmarks: u32 = raw_num_bookmarks
             .replace(&[',', '.'][..], "")
             .parse()
-            .expect(format!("Failed to convert {} to u32", raw_num_bookmarks).as_str());
+            .unwrap_or_else(|_| panic!("Failed to convert {} to u32", raw_num_bookmarks));
 
         let mut works = Vec::new();
         let mut authors = HashSet::new();
@@ -160,7 +159,7 @@ impl Series {
 
         for page in 1..=num_series_pages {
             if page > 1 {
-                document = get_page(id, Some(page), user).unwrap()
+                document = get_page(id, Some(page), user)?;
             };
             for work in document.select(&work_selector) {
                 let work_id = work
@@ -171,9 +170,9 @@ impl Series {
                     .skip(5)
                     .collect::<String>();
                 println!("  Found work {}", work_id);
-                let parsed_work = Work::parse_work_from_blurb(work, &title, config).unwrap();
-                fandoms.extend(parsed_work.fandoms());
-                authors.insert(parsed_work.author());
+                let parsed_work = Work::parse_work_from_blurb(work, &title, config)?;
+                fandoms.extend(parsed_work.fandoms.clone());
+                authors.insert(parsed_work.author.clone());
                 works.push(parsed_work);
             }
         }
@@ -199,9 +198,10 @@ impl Series {
     pub fn download(&self, path: &Path, format: DownloadFormat) -> std::io::Result<()> {
         let series_path = path.join(&self.title);
         create_dir(&series_path)?;
-        Ok(for work in &self.works {
+        for work in &self.works {
             let _ = work.download(&series_path, format, Some(&self.id));
             println!()
-        })
+        };
+        Ok(())
     }
 }
