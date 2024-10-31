@@ -1,5 +1,6 @@
 use reqwest::blocking::Client;
 use scraper::{Html, Selector};
+use crate::config::Config;
 
 pub struct User {
     username: String,
@@ -48,5 +49,13 @@ impl User {
             auth_token: auth_token.to_owned(),
             client,
         }
+    }
+}
+
+pub fn get_user(config: &Config) -> Option<User> {
+    if let (Some(username), Some(password)) = (&config.ao3_username, &config.ao3_password) {
+        Some(User::new(username, password))
+    } else {
+        None
     }
 }
