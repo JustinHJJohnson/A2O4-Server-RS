@@ -27,6 +27,12 @@ fn index() -> &'static str {
     "Hello, world!"
 }
 
+#[get("/test")]
+fn test() -> String {
+    let config = config::read_config();
+    format!("Download format is {}", config.default_format)
+}
+
 #[post("/download", format = "json", data = "<request>")]
 fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
     let Ok(url) = Url::parse(request.url) else {
@@ -74,4 +80,5 @@ fn rocket() -> _ {
     rocket::build()
         .mount("/", routes![index])
         .mount("/", routes![download])
+        .mount("/", routes![test])
 }

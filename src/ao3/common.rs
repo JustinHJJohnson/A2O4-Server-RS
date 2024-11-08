@@ -5,9 +5,22 @@ use enum_iterator::Sequence;
 use reqwest;
 use scraper::{Html, Selector};
 use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
-#[derive(Debug, EnumString, PartialEq, Eq, Hash, Display, Sequence, Clone, Copy)]
+#[derive(
+    Debug,
+    EnumString,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    Sequence,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize
+)]
 pub enum DownloadFormat {
     AZW3,
     EPUB,
