@@ -1,10 +1,8 @@
+use crate::ao3::common::DownloadFormat;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
-
-use serde::Deserialize;
-use toml::de::Error;
-use crate::ao3::common::DownloadFormat;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -34,9 +32,31 @@ pub struct Device {
     pub uses_koreader: Option<bool>,
 }
 
-pub fn read_config() -> Result<Config, Error> {
-    let mut file = File::open("config.toml").unwrap();
+pub fn read_config() -> Result<Config, String> {
+    let mut file = match File::open("config.toml") {
+        Ok(file) => file,
+        Err(_) => return Err(String::from(
+            "Failed to open config.toml, make sure the file exists and has the right permissions",
+        )),
+    };
     let mut file_contents = String::new();
-    let _ = file.read_to_string(&mut file_contents); // TODO handle error
-    toml::from_str(&file_contents)
+    let read_result = file.read_to_string(&mut file_contents);
+    if read_result.is_err() {
+        return Err(read_result.err().unwrap().to_string());
+    };
+
+    match toml::from_str::<Config>(&file_contents) {
+        Ok(config) => Ok(config),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+pub fn check_config() {
+    match read_config() {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("Config Error: {}", error);
+            std::process::exit(1)
+        }
+    };
 }
