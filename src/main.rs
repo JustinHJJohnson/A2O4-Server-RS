@@ -4,20 +4,22 @@ mod sftp;
 
 use std::path::Path;
 use serde::Deserialize;
-use rocket::http::{Status, ContentType};
-use rocket::response::{status, Response};
+use rocket::http::Status;
 use rocket::serde::json::Json;
 use url::Url;
+
 use crate::ao3::common::DownloadFormat;
 use crate::ao3::series::Series;
 use crate::ao3::user;
 use crate::ao3::work::Work;
+use crate::sftp::{upload_series, upload_work};
 
 #[macro_use] extern crate rocket;
 
 #[derive(Deserialize)]
 struct DownloadRequest<'r> {
-    url: &'r str
+    url: &'r str,
+    device: Option<&'r str>
 }
 
 #[get("/")]
@@ -44,22 +46,26 @@ fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
     
     let config = config::read_config();
     let user = user::get_user(&config);
+    let device = if let Some(device_name) = request.device {
+        config.get_device_by_name(device_name).unwrap() //TODO error checking on this
+    } else {
+        config.devices.first().unwrap()
+    };
 
-    let _ = match url_type {
-        "works" => Work::parse_work(id, user.as_ref(), &config)
-            .unwrap()
-            .download(Path::new(&config.download_path), DownloadFormat::EPUB, None),
-        "series" => Series::parse_series(id, user.as_ref(), &config)
-            .unwrap()
-            .download(Path::new(&config.download_path), DownloadFormat::EPUB),
+    match url_type {
+        "works" => {
+            let work = Work::parse_work(id, user.as_ref(), &config).unwrap();
+            let _ = work.download(Path::new(&config.download_path), DownloadFormat::EPUB, None);
+            upload_work(&work, device, &config, DownloadFormat::EPUB, None, None)
+        },
+        "series" => {
+            let series = Series::parse_series(id, user.as_ref(), &config).unwrap();
+            let _ = series.download(Path::new(&config.download_path), DownloadFormat::EPUB);
+            upload_series(&series, device, &config, DownloadFormat::EPUB);
+        },
         _ => unreachable!()
     };
-    
-    let string = String::from("test");
-    
-    let test = "test".to_string();
 
-    println!("type: {}, id: {}", url_type, id);
     (Status::Ok, format!("Successfully downloaded {url_type} with id {id}"))
 }
 

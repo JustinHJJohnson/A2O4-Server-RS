@@ -32,3 +32,9 @@ pub fn read_config() -> Config {
     let config: Config = toml::from_str(&file_contents).unwrap();
     config
 }
+
+impl Config {
+    pub fn get_device_by_name(&self, name: &str) -> Option<&Device> {
+        self.devices.iter().find(|d| d.name == name)
+    }
+}
