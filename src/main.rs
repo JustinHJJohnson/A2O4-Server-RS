@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::path::Path;
 use url::Url;
 
-use crate::ao3::common::DownloadFormat;
+use crate::ao3::common::{get_series_pages, DownloadFormat};
 use crate::ao3::series::Series;
 use crate::ao3::user;
 use crate::ao3::work::Work;
@@ -28,18 +28,12 @@ struct DownloadRequest<'r> {
 fn index() -> &'static str { "Hello, world!" }
 
 #[get("/test")]
-fn test() -> (Status, String) {
-    let config = match config::read_config() {
-        Ok(config) => config,
-        Err(error) => {
-            return (Status::InternalServerError, format!("Config Error: {}", error))
-        }
-    };
-    (Status::Ok, format!("Default file format is: {}", config.default_format))
+async fn test() -> (Status, String) {
+    (Status::Ok, String::from("Hello, world!"))
 }
 
 #[post("/download", format = "json", data = "<request>")]
-fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
+async fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
     let Ok(url) = Url::parse(request.url) else {
         return (Status::BadRequest, String::from("Could not parse provided URL"));
     };
@@ -55,7 +49,7 @@ fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
         return (Status::BadRequest, String::from("URL is not for a series or work"));
     }
 
-    let config = match config::read_config() {
+    let config = match config::read_config().await {
         Ok(config) => config,
         Err(error) => {
             return (Status::InternalServerError, format!("Config Error: {}", error))
@@ -68,16 +62,17 @@ fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
         config.devices.first().unwrap()
     };
 
+    //TODO actually check for download errors
     match url_type {
         "works" => {
-            let work = Work::parse_work(id, user.as_ref(), &config).unwrap();
-            let _ = work.download(Path::new(&config.download_path), DownloadFormat::EPUB, None);
-            upload_work(&work, device, &config, DownloadFormat::EPUB, None, None)
+            let work = Work::parse_work(id, user.await.as_ref(), &config).await.unwrap();
+            let _ = work.download(Path::new(&config.download_path), DownloadFormat::EPUB, None).await;
+            //upload_work(&work, device, &config, DownloadFormat::EPUB, None, None)
         }
         "series" => {
-            let series = Series::parse_series(id, user.as_ref(), &config).unwrap();
-            let _ = series.download(Path::new(&config.download_path), DownloadFormat::EPUB);
-            upload_series(&series, device, &config, DownloadFormat::EPUB);
+            let series = Series::parse_series(id, user.await.as_ref(), &config).await.unwrap();
+            let _ = series.download(Path::new(&config.download_path), DownloadFormat::EPUB).await;
+            //upload_series(&series, device, &config, DownloadFormat::EPUB);
         }
         _ => unreachable!(),
     };
@@ -86,8 +81,8 @@ fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
 }
 
 #[launch]
-fn rocket() -> _ {
-    check_config();
+async fn rocket() -> _ {
+    check_config().await;
     rocket::build()
         .mount("/", routes![index])
         .mount("/", routes![download])

@@ -5,6 +5,8 @@ use enum_iterator::Sequence;
 use reqwest;
 use scraper::{Html, Selector};
 use std::collections::HashSet;
+use regex::Regex;
+use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
@@ -29,25 +31,21 @@ pub enum DownloadFormat {
     HTML,
 }
 
-pub fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html> {
+pub async fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html> {
     let url = if let Some(i) = page {
-        format!("https://archiveofourown.org/series/{}?page={}", id, i)
+        format!("https://archiveofourown.org/series/{id}?page={i}")
     } else {
         format!("https://archiveofourown.org/works/{id}")
     };
 
-    let response = if let Some(i) = user {
-        i.client.get(url).send()
-    } else {
-        reqwest::blocking::get(url)
-    }?;
+    let response = request_with_user(url, user).await;
 
     if response.url().as_str() == "https://archiveofourown.org/users/login?restricted=true" {
         eprint!("This work/series is restricted and requires an AO3 account");
         return Err(Error::msg("Restricted Error"));
     }
 
-    let html_content = Html::parse_document(&response.text()?);
+    let html_content = Html::parse_document(&response.text().await?);
 
     let error_404_selector = Selector::parse("h2.heading").unwrap();
 
@@ -64,6 +62,46 @@ pub fn get_page(id: &str, page: Option<u8>, user: Option<&User>) -> Result<Html>
     }
 
     Ok(html_content)
+}
+
+pub async fn get_series_pages(id: &str, user: Option<&User>) -> Result<Vec<Html>> {
+    let url = format!("https://archiveofourown.org/series/{id}");
+    let response = request_with_user(url, user).await;
+    
+    if response.status() == StatusCode::NOT_FOUND {
+        eprintln!("This url does not lead to a valid work/series");
+        return Err(Error::msg("URL Error"));
+    }
+    if response.url().as_str() == "https://archiveofourown.org/users/login?restricted=true" {
+        eprint!("This work/series is restricted and requires an AO3 account");
+        return Err(Error::msg("Restricted Error"));
+    }
+
+    let response_text = response.text().await.unwrap();
+    let num_pages: u8 = if response_text.contains("Pages Navigation") {
+        let response_substring = response_text
+            .split("Pages Navigation")
+            .nth(1)
+            .unwrap()
+            .split('\n')
+            .next()
+            .unwrap();
+
+        Regex::new(r">\d+<").unwrap().captures_iter(response_substring).count() as u8
+    } else {
+        1
+    };
+    
+    let mut raw_html: Vec<String> = vec![response_text];
+
+    //TODO should probably check all these responses are successes
+    for page in 2..=num_pages {
+        let url = format!("https://archiveofourown.org/series/{id}?page={page}");
+        let response = request_with_user(url, user).await;
+        raw_html.push(response.text().await.unwrap());
+    }
+
+    Ok(raw_html.iter().map(|a| Html::parse_document(&a)).collect())
 }
 
 pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
@@ -98,6 +136,14 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
             .next()
             .unwrap()
             .to_string()
+    }
+}
+
+async fn request_with_user(url: String, user: Option<&User>) -> Response {
+    if let Some(i) = user {
+        i.client.get(url).send().await.unwrap()
+    } else {
+        reqwest::get(url).await.unwrap()
     }
 }
 

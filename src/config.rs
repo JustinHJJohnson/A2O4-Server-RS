@@ -32,7 +32,7 @@ pub struct Device {
     pub uses_koreader: Option<bool>,
 }
 
-pub fn read_config() -> Result<Config, String> {
+pub async fn read_config() -> Result<Config, String> {
     let mut file = match File::open("config.toml") {
         Ok(file) => file,
         Err(_) => return Err(String::from(
@@ -51,8 +51,8 @@ pub fn read_config() -> Result<Config, String> {
     }
 }
 
-pub fn check_config() {
-    match read_config() {
+pub async fn check_config() {
+    match read_config().await {
         Ok(_) => (),
         Err(error) => {
             eprintln!("Config Error: {}", error);

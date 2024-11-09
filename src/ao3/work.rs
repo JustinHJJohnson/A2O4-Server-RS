@@ -5,10 +5,10 @@ use crate::config::Config;
 use anyhow::Result;
 use scraper::{ElementRef, Selector};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
 use std::path::Path;
 use std::str::FromStr;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Debug)]
 pub struct Work {
@@ -70,9 +70,9 @@ impl Work {
         }
     }
 
-    pub fn parse_work(id: &str, user: Option<&User>, config: &Config) -> Result<Work> {
+    pub async fn parse_work(id: &str, user: Option<&User>, config: &Config) -> Result<Work> {
         println!("loading work {}", id);
-        let document = get_page(id, None, user).expect("Failed to get the requested page");
+        let document = get_page(id, None, user).await.expect("Failed to get the requested page");
 
         let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
         let author_selector = Selector::parse("h3.byline.heading>a").expect("Error parsing author");
@@ -291,7 +291,7 @@ impl Work {
         })
     }
 
-    pub fn download(
+    pub async fn download(
         &self,
         download_folder: &Path,
         format: DownloadFormat,
@@ -300,16 +300,18 @@ impl Work {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {}", download_link);
 
-        let work = reqwest::blocking::get(download_link)
+        let work = reqwest::get(download_link)
+            .await
             .unwrap()
             .bytes()
+            .await
             .unwrap();
         let download_path = download_folder.join(self.get_filename(format, series_id));
 
         println!("Downloading to: {}", download_folder.to_str().unwrap());
 
-        let mut work_file = File::create(download_path)?;
-        work_file.write_all(&work)?;
+        let mut work_file = File::create(download_path).await?;
+        work_file.write_all(&work).await?;
         Ok(())
     }
 }

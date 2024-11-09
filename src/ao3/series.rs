@@ -1,4 +1,4 @@
-use crate::ao3::common::{filter_fandoms, get_page, DownloadFormat};
+use crate::ao3::common::{filter_fandoms, get_series_pages, DownloadFormat};
 use crate::ao3::user::User;
 use crate::ao3::work::Work;
 use crate::config::Config;
@@ -6,8 +6,9 @@ use crate::config::Config;
 use anyhow::Result;
 use scraper::Selector;
 use std::collections::HashSet;
-use std::fs::create_dir;
+use std::io::ErrorKind;
 use std::path::Path;
+use tokio::fs::create_dir;
 
 pub struct Series {
     pub id: String,
@@ -52,18 +53,10 @@ impl std::fmt::Display for Series {
 }
 
 impl Series {
-    pub fn parse_series(id: &str, user: Option<&User>, config: &Config) -> Result<Series> {
+    pub async fn parse_series(id: &str, user: Option<&User>, config: &Config) -> Result<Series> {
         println!("Loading series {}", id);
-        let mut document = get_page(id, Some(1), user).expect("Failed to get the requested page");
-
-        let pagination_selector = Selector::parse("ol.pagination.actions>li")
-            .expect("Failed to parse pagination buttons");
-        let pagination_elements = document.select(&pagination_selector).count() as u8;
-        let num_series_pages = if pagination_elements > 0 {
-            pagination_elements / 2 - 2
-        } else {
-            1
-        };
+        let all_pages = get_series_pages(id, user).await?;
+        let document = all_pages.first().unwrap();
 
         let title_selector = Selector::parse("h2.heading").expect("Failed to parse title");
         let creator_selector =
@@ -157,11 +150,8 @@ impl Series {
         let mut authors = HashSet::new();
         let mut fandoms = HashSet::new();
 
-        for page in 1..=num_series_pages {
-            if page > 1 {
-                document = get_page(id, Some(page), user)?;
-            };
-            for work in document.select(&work_selector) {
+        for page in all_pages.into_iter() {
+            for work in page.select(&work_selector) {
                 let work_id = work
                     .value()
                     .attr("id")
@@ -195,11 +185,19 @@ impl Series {
         })
     }
 
-    pub fn download(&self, path: &Path, format: DownloadFormat) -> std::io::Result<()> {
+    pub async fn download(&self, path: &Path, format: DownloadFormat) -> std::io::Result<()> {
         let series_path = path.join(&self.title);
-        create_dir(&series_path)?;
+        match create_dir(&series_path).await {
+            Ok(_) => {}
+            Err(error) => {
+                match error.kind() {
+                    ErrorKind::AlreadyExists => {}
+                    _ => return Err(error),
+                }
+            }
+        };
         for work in &self.works {
-            let _ = work.download(&series_path, format, Some(&self.id));
+            let _ = work.download(&series_path, format, Some(&self.id)).await;
             println!()
         };
         Ok(())
