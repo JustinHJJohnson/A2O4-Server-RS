@@ -112,6 +112,7 @@ mod tests {
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
+            default_format: DownloadFormat::EPUB,
             devices: Vec::new(),
             fandom_map: HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
@@ -139,6 +140,7 @@ mod tests {
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
+            default_format: DownloadFormat::EPUB,
             devices: Vec::new(),
             fandom_map: HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
@@ -166,6 +168,7 @@ mod tests {
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
+            default_format: DownloadFormat::EPUB,
             devices: Vec::new(),
             fandom_map: HashMap::new(),
             fandom_filter: HashMap::from([
@@ -186,6 +189,7 @@ mod tests {
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
+            default_format: DownloadFormat::EPUB,
             devices: Vec::new(),
             fandom_map: HashMap::new(),
             fandom_filter: HashMap::from([
@@ -213,6 +217,7 @@ mod tests {
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
+            default_format: DownloadFormat::EPUB,
             devices: Vec::new(),
             fandom_map: HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
@@ -247,6 +252,7 @@ mod tests {
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
+            default_format: DownloadFormat::EPUB,
             devices: Vec::new(),
             fandom_map: HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),

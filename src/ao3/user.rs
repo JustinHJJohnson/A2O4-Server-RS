@@ -20,7 +20,9 @@ impl User {
             .unwrap()
             .text();
         let login_page = Html::parse_document(&html_content.unwrap());
-        let auth_selector = Selector::parse("input[name=authenticity_token]").unwrap();
+        let auth_selector = Selector::parse(
+            "input[name=authenticity_token]"
+        ).unwrap();
         let auth_token: &str = login_page
             .select(&auth_selector)
             .next()

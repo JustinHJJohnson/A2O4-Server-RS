@@ -53,7 +53,7 @@ pub fn read_config() -> Result<Config, String> {
 
 pub fn check_config() {
     match read_config() {
-        Ok(config) => config,
+        Ok(_) => (),
         Err(error) => {
             eprintln!("Config Error: {}", error);
             std::process::exit(1)
