@@ -3,17 +3,15 @@ use crate::ao3::series::Series;
 use crate::ao3::work::Work;
 use crate::config::{Config, Device};
 
-use indicatif::{ProgressBar, ProgressStyle};
 use ssh2::{Session, Sftp};
 use std::path::Path;
 use std::{
-    cmp::min,
     fs::File,
     io::{Read, Write},
     net::TcpStream,
 };
 
-pub fn upload_work(
+pub async fn upload_work(
     work: &Work,
     device: &Device,
     config: &Config,
@@ -80,24 +78,12 @@ pub fn upload_work(
 
     let chunk_size = 15000;
 
-    let pb = ProgressBar::new(file_length.try_into().unwrap());
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{msg} {spinner:.green} [{elapsed_precise}] [{bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})"
-        )
-            .unwrap()
-            .progress_chars("##-")
-    );
-
     for (i, chunk) in file_contents.chunks(chunk_size).enumerate() {
         remote_file.write_all(chunk).unwrap();
-        pb.set_position(min(i * chunk_size, file_length).try_into().unwrap());
     }
-
-    pb.finish_with_message("Finished writing file\n");
 }
 
-pub fn upload_series(
+pub async fn upload_series(
     series: &Series,
     device: &Device,
     config: &Config,
@@ -123,7 +109,7 @@ pub fn upload_series(
             download_format,
             Some(&sftp),
             Some(&series.id),
-        );
+        ).await
     }
 }
 
@@ -147,6 +133,7 @@ fn create_missing_folders_on_remote(
 }
 
 pub fn create_sftp_connection(device: &Device) -> Sftp {
+    //TODO proper error handling here if host is unreachable
     let tcp = TcpStream::connect((device.ip.clone(), device.port)).unwrap();
     let mut session = Session::new().unwrap();
     session.set_tcp_stream(tcp);

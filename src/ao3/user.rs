@@ -1,6 +1,5 @@
 use regex::Regex;
 use reqwest::Client;
-use scraper::{Html, Selector};
 use crate::config::Config;
 
 pub struct User {
@@ -12,9 +11,14 @@ pub struct User {
 
 impl User {
     //TODO AO3 has a banner if already logged in, maybe useful login caching
+    //TODO maybe use cookie provider to persist login
     pub async fn new(username: &str, password: &str) -> Self {
         println!("logging in");
-        let client = Client::builder().cookie_store(true).build().unwrap();
+        let client = Client::builder()
+            .cookie_store(true)
+            .user_agent("curl/8.11.1") //TODO fix this hack
+            .build()
+            .unwrap();
 
         let html_content = client
             .get("https://archiveofourown.org/users/login")

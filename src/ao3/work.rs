@@ -300,7 +300,12 @@ impl Work {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {}", download_link);
 
-        let work = reqwest::get(download_link)
+        let work = reqwest::Client::builder()
+            .user_agent("curl/8.11.1")  //TODO fix this hack and consider using single client when downloading series
+            .build()
+            .unwrap()
+            .get(download_link)
+            .send()
             .await
             .unwrap()
             .bytes()
