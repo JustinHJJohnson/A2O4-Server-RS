@@ -83,6 +83,12 @@ async fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
 #[launch]
 async fn rocket() -> _ {
     check_config().await;
+
+    // if need to sort out CORS https://github.com/lawliet89/rocket_cors/blob/master/examples/fairing.rs
+
+    // consider using .manage to pass around the config or other state
     rocket::build()
+        // consider using Rocket.toml to set these
+        .configure(rocket::Config::figment().merge(("port", 9797)).merge(("address", "0.0.0.0")))
         .mount("/", routes![download])
 }
