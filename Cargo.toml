@@ -5,12 +5,12 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
+directories = "6.0.0"
 enum-iterator = "2.1.0"
-indicatif = "0.17.8"
 regex = "1.11.1"
 reqwest = { version = "0.12.5", features = ["blocking", "cookies"] }
 rocket = { version = "0.5.1", features = ["json"] }
-scraper = "0.21.0"
+scraper = "0.22.0"
 serde = { version = "1.0.210", features = ["derive"] }
 ssh2 = "0.9.4"
 strum = "0.26.3"

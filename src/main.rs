@@ -2,18 +2,18 @@ mod ao3;
 mod config;
 mod sftp;
 
+use crate::ao3::common::DownloadFormat;
+use crate::ao3::series::Series;
+use crate::ao3::user;
+use crate::ao3::work::Work;
+use crate::config::read_config;
+use crate::sftp::{upload_series, upload_work};
+
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use serde::Deserialize;
 use std::path::Path;
 use url::Url;
-
-use crate::ao3::common::DownloadFormat;
-use crate::ao3::series::Series;
-use crate::ao3::user;
-use crate::ao3::work::Work;
-use crate::config::check_config;
-use crate::sftp::{upload_series, upload_work};
 
 #[macro_use]
 extern crate rocket;
@@ -82,13 +82,22 @@ async fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
 
 #[launch]
 async fn rocket() -> _ {
-    check_config().await;
+    match read_config().await {
+        Ok(config) => {
+            // if need to sort out CORS https://github.com/lawliet89/rocket_cors/blob/master/examples/fairing.rs
 
-    // if need to sort out CORS https://github.com/lawliet89/rocket_cors/blob/master/examples/fairing.rs
-
-    // consider using .manage to pass around the config or other state
-    rocket::build()
-        // consider using Rocket.toml to set these
-        .configure(rocket::Config::figment().merge(("port", 9797)).merge(("address", "0.0.0.0")))
-        .mount("/", routes![download])
+            // consider using .manage to pass around the config or other state
+            rocket::build()
+                .configure(
+                    rocket::Config::figment()
+                        .merge(("port", config.port))
+                        .merge(("address", "0.0.0.0"))
+                )
+                .mount("/", routes![download])
+        },
+        Err(error) => {
+            eprintln!("Config Error: {}", error);
+            std::process::exit(1)
+        }
+    }
 }

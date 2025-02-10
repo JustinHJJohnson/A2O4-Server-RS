@@ -87,7 +87,7 @@ pub async fn get_series_pages(id: &str, user: Option<&User>) -> Result<Vec<Html>
             .next()
             .unwrap();
 
-        Regex::new(r">\d+<").unwrap().captures_iter(response_substring).count() as u8
+        Regex::new(r">\d+<")?.captures_iter(response_substring).count() as u8
     } else {
         1
     };
@@ -155,6 +155,7 @@ mod tests {
     #[test]
     fn map() {
         let config = Config {
+            port: 1,
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
@@ -183,6 +184,7 @@ mod tests {
     #[test]
     fn map_lets_unmatched_fandoms_through() {
         let config = Config {
+            port: 1,
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
@@ -211,6 +213,7 @@ mod tests {
     #[test]
     fn filter() {
         let config = Config {
+            port: 1,
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
@@ -232,6 +235,7 @@ mod tests {
     #[test]
     fn recursive_filter() {
         let config = Config {
+            port: 1,
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
@@ -260,6 +264,7 @@ mod tests {
     #[test]
     fn map_and_filter() {
         let config = Config {
+            port: 1,
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
@@ -295,6 +300,7 @@ mod tests {
     #[test]
     fn map_and_filter_recursive() {
         let config = Config {
+            port: 1,
             download_path: "some folder/some file".to_owned(),
             ao3_username: Some("test".to_owned()),
             ao3_password: Some("test".to_owned()),
