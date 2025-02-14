@@ -5,7 +5,7 @@ mod sftp;
 use crate::ao3::common::DownloadFormat;
 use crate::ao3::series::Series;
 use crate::ao3::user;
-use crate::ao3::work::Work;
+use crate::ao3::work::{test_work, Work};
 use crate::config::read_config;
 use crate::sftp::{upload_series, upload_work};
 
@@ -41,12 +41,13 @@ async fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
         return (Status::BadRequest, String::from("URL is not for a series or work"));
     }
 
-    let config = match config::read_config().await {
+    let config = match read_config().await {
         Ok(config) => config,
         Err(error) => {
             return (Status::InternalServerError, format!("Config Error: {}", error))
         } 
     };
+
     let user = user::get_user(&config);
     let device = if let Some(device_name) = request.device {
         config.get_device_by_name(device_name).unwrap() //TODO error checking on this
@@ -80,6 +81,39 @@ async fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
     (Status::Ok, format!("Successfully downloaded {url_type} with id {id}"))
 }
 
+#[derive(Deserialize)]
+struct UploadRequest<'r> {
+    work: &'r str,
+    fandom: &'r str,
+    series: Option<&'r str>,
+    part_in_series: Option<&'r str>,
+    device: Option<&'r str>,
+}
+
+#[post("/upload", format = "json", data = "<request>")]
+async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {let config = match read_config().await {
+        Ok(config) => config,
+        Err(error) => {
+            return (Status::InternalServerError, format!("Config Error: {}", error))
+        }
+    };
+    
+    let device = if let Some(device_name) = request.device {
+        config.get_device_by_name(device_name).unwrap() //TODO error checking on this
+    } else {
+        config.devices.first().unwrap()
+    };
+    
+    let work = test_work(request.work.to_owned(), request.fandom.to_owned(), request.series, request.part_in_series);
+    
+    match request.series {
+        None => { upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await }
+        Some(_) => { upload_work(&work, device, &config, DownloadFormat::EPUB, None, Some(&"1".to_owned())).await }
+    }
+
+    (Status::Ok, format!("Successfully uploaded {} to {}", request.work, request.device.unwrap()))
+}
+
 #[launch]
 async fn rocket() -> _ {
     match read_config().await {
@@ -94,6 +128,7 @@ async fn rocket() -> _ {
                         .merge(("address", "0.0.0.0"))
                 )
                 .mount("/", routes![download])
+                .mount("/", routes![upload])
         },
         Err(error) => {
             eprintln!("Config Error: {}", error);

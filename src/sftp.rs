@@ -73,7 +73,8 @@ pub async fn upload_work(
             remote_download_folder,
         );
     }
-
+    
+    //TODO handle if remote path doesn't exist
     let mut remote_file = sftp.create(Path::new(&remote_file_path)).unwrap();
 
     let chunk_size = 15000;
@@ -127,7 +128,7 @@ fn create_missing_folders_on_remote(
 
     for path in remote_file_iterator {
         if sftp.lstat(path).is_err() {
-            let _ = sftp.mkdir(path, 0); // TODO handle this error
+            sftp.mkdir(path, 0o777).unwrap(); // TODO handle this error and maybe set more restrictive permissions
         }
     }
 }

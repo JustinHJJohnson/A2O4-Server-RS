@@ -320,3 +320,41 @@ impl Work {
         Ok(())
     }
 }
+
+pub fn test_work(title: String, fandom: String, series: Option<&str>, part_in_series: Option<&str>) -> Work {
+    match series {
+        None => {
+            Work {
+                id: "1".to_owned(),
+                title,
+                author: "".to_string(),
+                download_links: Default::default(),
+                fandoms: vec![],
+                filtered_fandom: fandom,
+                relationships: vec![],
+                characters: vec![],
+                additional_tags: vec![],
+                series: Default::default(),
+            }
+        }
+        Some(_) => {
+            Work {
+                id: "1".to_owned(),
+                title,
+                author: "".to_string(),
+                download_links: Default::default(),
+                fandoms: vec![],
+                filtered_fandom: fandom,
+                relationships: vec![],
+                characters: vec![],
+                additional_tags: vec![],
+                series: HashMap::from([("1".to_owned(), SeriesLink{
+                    series_id: "1".to_string(),
+                    series_name: series.unwrap().to_owned(),
+                    part_in_series: part_in_series.unwrap().parse::<u8>().unwrap(),
+                })]),
+            }
+        }
+    }
+    
+}
