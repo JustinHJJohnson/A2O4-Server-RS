@@ -76,6 +76,7 @@ impl Work {
 
         let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
         let author_selector = Selector::parse("h3.byline.heading>a").expect("Error parsing author");
+        let anonymous_author_selector = Selector::parse("h3.byline.heading").expect("Error parsing author");
         let downloads_selector =
             Selector::parse("li.download>ul>li>a").expect("Error parsing download links");
         let fandoms_selector =
@@ -98,7 +99,12 @@ impl Work {
         let author: String = document
             .select(&author_selector)
             .next()
-            .unwrap()
+            .unwrap_or(
+                document
+                    .select(&anonymous_author_selector)
+                    .next()
+                    .unwrap()
+            )
             .text()
             .collect();
         let downloads_popup = document.select(&downloads_selector);
@@ -212,7 +218,11 @@ impl Work {
 
         println!("  Parsing work {} - {}", id, title);
 
-        let author: String = heading.next().unwrap().text().collect();
+        let author: String = if let Some(element) = heading.next() {
+            element.text().collect()
+        } else {
+            "Anonymous".to_owned()
+        };
         let download_links: HashMap<DownloadFormat, String> =
             enum_iterator::all::<DownloadFormat>()
                 .map(|download_format| {

@@ -61,6 +61,8 @@ impl Series {
         let title_selector = Selector::parse("h2.heading").expect("Failed to parse title");
         let creator_selector =
             Selector::parse("dl.series.meta.group>dd>a").expect("Failed to parse creator");
+        let anonymous_creator_selector =
+            Selector::parse("dl.series.meta.group>dd").expect("Failed to parse creator");
         let series_date_selector =
             Selector::parse("dl.series.meta.group>dd").expect("Failed to parse series dates");
         let description_selector =
@@ -89,7 +91,12 @@ impl Series {
         let creator: String = document
             .select(&creator_selector)
             .next()
-            .unwrap()
+            .unwrap_or(
+                document
+                    .select(&anonymous_creator_selector)
+                    .next()
+                    .unwrap()
+            )
             .text()
             .collect();
         let series_begun: String = series_date_select.next().unwrap().text().collect();
