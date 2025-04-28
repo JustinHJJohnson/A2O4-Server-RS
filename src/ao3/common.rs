@@ -98,15 +98,15 @@ pub async fn get_series_pages(id: &str, user: Option<&User>) -> Result<Vec<Html>
     for page in 2..=num_pages {
         let url = format!("https://archiveofourown.org/series/{id}?page={page}");
         let response = request_with_user(url, user).await;
-        raw_html.push(response.text().await.unwrap());
+        raw_html.push(response.text().await?);
     }
 
-    Ok(raw_html.iter().map(|a| Html::parse_document(&a)).collect())
+    Ok(raw_html.iter().map(|a| Html::parse_document(a)).collect())
 }
 
 pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
     let mut mapped_fandoms: HashSet<String> = HashSet::from_iter(fandoms.to_owned());
-
+    
     for fandom in fandoms {
         if config.fandom_map.contains_key(fandom) {
             mapped_fandoms.remove(fandom);

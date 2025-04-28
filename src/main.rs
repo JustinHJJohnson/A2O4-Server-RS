@@ -48,12 +48,10 @@ async fn download(request: Json<DownloadRequest<'_>>) -> (Status, String) {
         } 
     };
 
+    return (Status::Ok, "Successfully hit endpoint".parse().unwrap());
+
     let user = user::get_user(&config);
-    let device = if let Some(device_name) = request.device {
-        config.get_device_by_name(device_name).unwrap() //TODO error checking on this
-    } else {
-        config.devices.first().unwrap()
-    };
+    let device = config.get_device_by_name_or_first(request.device);
 
     //TODO actually check for download errors
     match url_type {
@@ -98,11 +96,7 @@ async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {let confi
         }
     };
     
-    let device = if let Some(device_name) = request.device {
-        config.get_device_by_name(device_name).unwrap() //TODO error checking on this
-    } else {
-        config.devices.first().unwrap()
-    };
+    let device = config.get_device_by_name_or_first(request.device);
     
     let work = test_work(request.work.to_owned(), request.fandom.to_owned(), request.series, request.part_in_series);
     

@@ -79,8 +79,8 @@ pub async fn upload_work(
 
     let chunk_size = 15000;
 
-    for (i, chunk) in file_contents.chunks(chunk_size).enumerate() {
-        remote_file.write_all(chunk).unwrap();
+    for chunk in file_contents.chunks(chunk_size).enumerate() {
+        remote_file.write_all(chunk.1).unwrap();
     }
 }
 

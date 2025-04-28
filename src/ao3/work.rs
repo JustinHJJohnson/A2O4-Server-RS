@@ -221,7 +221,7 @@ impl Work {
         let author: String = if let Some(element) = heading.next() {
             element.text().collect()
         } else {
-            "Anonymous".to_owned()
+            "Anonymous".to_owned() //TODO use a proper selector for this
         };
         let download_links: HashMap<DownloadFormat, String> =
             enum_iterator::all::<DownloadFormat>()

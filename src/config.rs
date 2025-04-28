@@ -22,6 +22,14 @@ impl Config {
     pub fn get_device_by_name(&self, name: &str) -> Option<&Device> {
         self.devices.iter().find(|d| d.name == name)
     }
+    
+    pub fn get_device_by_name_or_first(&self, name: Option<&str>) -> &Device {
+        if let Some(device_name) = name {
+            self.get_device_by_name(device_name).unwrap() //TODO error checking on this
+        } else {
+            self.devices.first().unwrap()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
