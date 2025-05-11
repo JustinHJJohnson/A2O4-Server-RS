@@ -53,9 +53,10 @@ impl std::fmt::Display for Series {
 }
 
 impl Series {
-    pub async fn parse_series(id: &str, user: Option<&User>, config: &Config) -> Result<Series> {
+    pub async fn parse_series(id: &str, user: &User, config: &Config) -> Result<Series> {
         println!("Loading series {}", id);
         let all_pages = get_series_pages(id, user).await?;
+        println!("Got AO3 response");
         let document = all_pages.first().unwrap();
 
         let title_selector = Selector::parse("h2.heading").expect("Failed to parse title");
@@ -173,6 +174,8 @@ impl Series {
                 works.push(parsed_work);
             }
         }
+        
+        println!("Finished parsing series");
 
         Ok(Series {
             id: id.to_owned(),
@@ -192,7 +195,7 @@ impl Series {
         })
     }
 
-    pub async fn download(&self, path: &Path, format: DownloadFormat) -> std::io::Result<()> {
+    pub async fn download(&self, path: &Path, format: DownloadFormat, user: &User) -> std::io::Result<()> {
         let series_path = path.join(&self.title);
         match create_dir(&series_path).await {
             Ok(_) => {}
@@ -204,7 +207,7 @@ impl Series {
             }
         };
         for work in &self.works {
-            let _ = work.download(&series_path, format, Some(&self.id)).await;
+            let _ = work.download(&series_path, format, Some(&self.id), user).await;
             println!()
         };
         Ok(())

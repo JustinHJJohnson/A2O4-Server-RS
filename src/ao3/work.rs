@@ -70,9 +70,10 @@ impl Work {
         }
     }
 
-    pub async fn parse_work(id: &str, user: Option<&User>, config: &Config) -> Result<Work> {
+    pub async fn parse_work(id: &str, user: &User, config: &Config, fandom_override: Option<&str>) -> Result<Work> {
         println!("loading work {}", id);
         let document = get_page(id, None, user).await.expect("Failed to get the requested page");
+        println!("Got AO3 response");
 
         let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
         let author_selector = Selector::parse("h3.byline.heading>a").expect("Error parsing author");
@@ -89,6 +90,9 @@ impl Work {
             Selector::parse("dd.freeform.tags>ul>li>a").expect("Error parsing additional tags");
         let part_in_series_selector = Selector::parse("dd.series>span.series>span.position")
             .expect("Error parsing part in series");
+        
+        let test = document.html();
+        println!("{}", test);
 
         let title: String = document
             .select(&title_selector)
@@ -177,11 +181,14 @@ impl Work {
 
         Ok(Work {
             id: id.to_owned(),
-            title: title.trim().to_owned(),
+            title: Self::cleanup_title(title),
             author,
             download_links,
             fandoms: fandoms.clone(),
-            filtered_fandom: filter_fandoms(&fandoms, config),
+            filtered_fandom: match fandom_override {
+                Some(fandom) => fandom.to_owned(),
+                None => filter_fandoms(&fandoms, config)
+            },
             relationships,
             characters,
             additional_tags,
@@ -289,7 +296,7 @@ impl Work {
 
         Ok(Work {
             id: id.to_owned(),
-            title: title.trim().to_owned(),
+            title: Self::cleanup_title(title),
             author,
             download_links,
             fandoms: fandoms.clone(),
@@ -306,14 +313,12 @@ impl Work {
         download_folder: &Path,
         format: DownloadFormat,
         series_id: Option<&String>,
+        user: &User,
     ) -> std::io::Result<()> {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {}", download_link);
 
-        let work = reqwest::Client::builder()
-            .user_agent("curl/8.11.1")  //TODO fix this hack and consider using single client when downloading series
-            .build()
-            .unwrap()
+        let work = user.client
             .get(download_link)
             .send()
             .await
@@ -328,6 +333,14 @@ impl Work {
         let mut work_file = File::create(download_path).await?;
         work_file.write_all(&work).await?;
         Ok(())
+    }
+    
+    fn cleanup_title(title: String) -> String {
+        title
+            .trim()
+            .chars()
+            .filter(|c| !['!', '?', ':'].contains(c))
+            .collect::<String>()
     }
 }
 

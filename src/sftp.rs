@@ -4,7 +4,7 @@ use crate::ao3::work::Work;
 use crate::config::{Config, Device};
 
 use ssh2::{Session, Sftp};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{
     fs::File,
     io::{Read, Write},
@@ -50,21 +50,20 @@ pub async fn upload_work(
     println!("file is {} bytes", file_length);
 
     let remote_download_folder = Path::new(&device.download_folder);
-    let remote_file_path = if let Some(unwrapped_series_id) = series_id {
-        remote_download_folder
-            .join(&work.filtered_fandom)
-            .join(
-                &work
-                    .get_series_link(unwrapped_series_id)
-                    .unwrap()
-                    .series_name,
-            )
-            .join(&filename)
-    } else {
-        remote_download_folder
-            .join(&work.filtered_fandom)
-            .join(&filename)
-    };
+    let mut remote_file_path = PathBuf::from(remote_download_folder);
+    remote_file_path.push(work.filtered_fandom.clone());
+    if work.filtered_fandom == "Original Work" {
+        remote_file_path.push(work.author.clone());
+    }
+    if let Some(unwrapped_series_id) = series_id {
+        remote_file_path.push(
+            &work
+                .get_series_link(unwrapped_series_id)
+                .unwrap()
+                .series_name,
+        );
+    }
+    remote_file_path.push(filename);
 
     if !using_existing_connection {
         create_missing_folders_on_remote(

@@ -4,4 +4,3 @@ downloads/
 Cargo.lock
 .vscode
 examples.txt
-config.toml

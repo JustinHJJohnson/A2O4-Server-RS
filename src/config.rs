@@ -2,6 +2,7 @@ use crate::ao3::common::DownloadFormat;
 
 use directories::ProjectDirs;
 use serde::Deserialize;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fs::{create_dir, File};
 use std::io::Read;
@@ -15,7 +16,7 @@ pub struct Config {
     pub default_format: DownloadFormat,
     pub devices: Vec<Device>,
     pub fandom_map: HashMap<String, String>,
-    pub fandom_filter: HashMap<String, Vec<String>>,
+    pub fandom_filter: IndexMap<String, Vec<String>>,
 }
 
 impl Config {
@@ -25,7 +26,10 @@ impl Config {
     
     pub fn get_device_by_name_or_first(&self, name: Option<&str>) -> &Device {
         if let Some(device_name) = name {
-            self.get_device_by_name(device_name).unwrap() //TODO error checking on this
+            match self.get_device_by_name(device_name) {
+                Some(device) => device,
+                None => self.devices.first().unwrap()
+            }
         } else {
             self.devices.first().unwrap()
         }
