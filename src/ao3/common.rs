@@ -116,16 +116,12 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
     let mut mapped_and_filtered_fandoms = mapped_fandoms.clone();
 
     for filter in &config.fandom_filter {
-        if mapped_fandoms.contains(filter.0) {
-            if let Some(fandom) = mapped_fandoms.get(filter.0) {
-                if mapped_and_filtered_fandoms.contains(fandom) {
-                    for fandom_to_remove in filter.1 {
-                        if fandom_to_remove == "*" {
-                            mapped_and_filtered_fandoms = HashSet::from_iter([fandom.clone()]);
-                        } else if mapped_fandoms.contains(fandom_to_remove) {
-                            mapped_and_filtered_fandoms.remove(fandom_to_remove);
-                        }
-                    }
+        if mapped_fandoms.contains(filter.0) & mapped_and_filtered_fandoms.contains(filter.0) {
+            for fandom_to_remove in filter.1 {
+                if fandom_to_remove == "*" {
+                    mapped_and_filtered_fandoms = HashSet::from_iter([filter.0.clone()]);
+                } else if mapped_fandoms.contains(fandom_to_remove) {
+                    mapped_and_filtered_fandoms.remove(fandom_to_remove);
                 }
             }
         }
@@ -308,35 +304,6 @@ mod tests {
         );
     }
 
-    /*#[test]
-    fn recursive_filter() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::new(),
-            fandom_filter: IndexMap::from([
-                ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
-                ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-            ]),
-        };
-
-        assert_eq!(
-            filter_fandoms(
-                &vec![
-                    "Fandom 1".to_owned(),
-                    "Fandom 2".to_owned(),
-                    "Fandom 3".to_owned()
-                ],
-                &config
-            ),
-            "Fandom 1"
-        );
-    }*/
-
     #[test]
     fn map_and_filter() {
         let config = Config {
@@ -372,45 +339,4 @@ mod tests {
             "Fandom 1"
         );
     }
-
-    /*#[test]
-    fn map_and_filter_recursive() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::from([
-                ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
-                ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
-                (
-                    "Fandom 2 the big boy returns".to_owned(),
-                    "Fandom 2".to_owned(),
-                ),
-                (
-                    "Fandom 3 god lord big boy is back".to_owned(),
-                    "Fandom 3".to_owned(),
-                ),
-            ]),
-            fandom_filter: IndexMap::from([
-                ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
-                ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-            ]),
-        };
-
-        assert_eq!(
-            filter_fandoms(
-                &vec![
-                    "Fandom 1 the big boy".to_owned(),
-                    "Fandom 1 TBB".to_owned(),
-                    "Fandom 2 the big boy returns".to_owned(),
-                    "Fandom 3 god lord big boy is back".to_owned()
-                ],
-                &config
-            ),
-            "Fandom 1"
-        );
-    }*/
 }

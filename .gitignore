@@ -1,6 +1,7 @@
 debug/
 target/
 downloads/
+.idea/
 Cargo.lock
 .vscode
 examples.txt

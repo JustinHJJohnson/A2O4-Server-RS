@@ -46,7 +46,7 @@ async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) 
         Ok(config) => config,
         Err(error) => {
             return (Status::InternalServerError, format!("Config Error: {}", error))
-        } 
+        }
     };
     
     let device = config.get_device_by_name_or_first(request.device);

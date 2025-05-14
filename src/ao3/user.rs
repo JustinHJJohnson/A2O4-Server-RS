@@ -7,8 +7,6 @@ use reqwest_cookie_store::CookieStoreMutex;
 use crate::config::Config;
 
 pub struct User {
-    username: String,
-    auth_token: String,
     pub client: Client,
     cookie_store: Arc<CookieStoreMutex>
 }
@@ -23,22 +21,19 @@ impl User {
         if cookie_store.lock().unwrap().iter_any().next().is_some() {
             println!("Loaded session from file");
             return Ok(Self {
-                username: username.to_owned(),
-                auth_token: "".to_owned(),
                 client: Self::build_client(cookie_store.clone()),
                 cookie_store
             })
         }
 
-        let (client, auth_token) = Self::auth_user(
+        //let (client, auth_token) = Self::auth_user(
+        let client = Self::auth_user(
             username.to_string(),
             password.to_string(),
             cookie_store.clone()
         ).await;
 
         Ok(Self {
-            username: username.to_owned(),
-            auth_token,
             client,
             cookie_store
         })
@@ -48,7 +43,7 @@ impl User {
         username: String,
         password: String,
         cookie_store: Arc<CookieStoreMutex>
-    ) -> (Client, String) {
+    ) -> Client {
         println!("logging in");
         let client = Self::build_client(cookie_store);
 
@@ -65,7 +60,7 @@ impl User {
         let form_data = [
             ("user[login]", username),
             ("user[password]", password),
-            ("authenticity_token", auth_token.clone()),
+            ("authenticity_token", auth_token)
         ];
         let login_response = client
             .post("https://archiveofourown.org/users/login")
@@ -76,7 +71,7 @@ impl User {
         // TODO do error checking here on the response status
         println!("{:?}", login_response.status());
         println!("Successfully logged in\n");
-        (client, auth_token)
+        client
     }
 
     async fn load_cookies() -> Result<Arc<CookieStoreMutex>,  String> {
