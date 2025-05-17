@@ -32,11 +32,12 @@ impl User {
             password.to_string(),
             cookie_store.clone()
         ).await;
+        
+        let user = Self { client, cookie_store };
+        
+        Self::write_cookies(&user).expect("Failed to write cookies");
 
-        Ok(Self {
-            client,
-            cookie_store
-        })
+        Ok(user)
     }
 
     async fn auth_user(
