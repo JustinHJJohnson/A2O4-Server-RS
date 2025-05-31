@@ -2,7 +2,7 @@ use crate::ao3::common::{filter_fandoms, get_page, DownloadFormat};
 use crate::ao3::user::User;
 use crate::config::Config;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use scraper::{ElementRef, Selector};
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,18 +10,25 @@ use std::str::FromStr;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct SeriesLink {
+    pub series_id: String,
+    pub series_name: String,
+    pub part_in_series: u8,
+}
+
 #[derive(Debug)]
 pub struct Work {
-    id: String,
-    title: String,
+    pub id: String,
+    pub title: String,
     pub author: String,
-    download_links: HashMap<DownloadFormat, String>,
+    pub download_links: HashMap<DownloadFormat, String>,
     pub fandoms: Vec<String>,
     pub filtered_fandom: String,
-    relationships: Vec<String>,
-    characters: Vec<String>,
-    additional_tags: Vec<String>,
-    series: HashMap<String, SeriesLink>,
+    pub relationships: Vec<String>,
+    pub characters: Vec<String>,
+    pub additional_tags: Vec<String>,
+    pub series: HashMap<String, SeriesLink>,
 }
 
 impl std::fmt::Display for Work {
@@ -43,36 +50,32 @@ impl std::fmt::Display for Work {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct SeriesLink {
-    pub series_id: String,
-    pub series_name: String,
-    pub part_in_series: u8,
-}
-
 impl Work {
     pub fn get_series_link(&self, series_id: &String) -> Option<&SeriesLink> {
         self.series.get(series_id)
     }
 
     pub fn get_filename(&self, format: DownloadFormat, series_id: Option<&String>) -> String {
-        if series_id.is_some() && self.get_series_link(series_id.unwrap()).is_some() {
-            format!(
-                "{} - {}.{}",
-                self.get_series_link(series_id.unwrap())
-                    .unwrap()
-                    .part_in_series,
-                self.title,
-                format.to_string().to_lowercase()
-            )
+        let non_series_filename = format!("{}.{}", self.title, format.to_string().to_lowercase());
+        
+        if let Some(series_id) = series_id {
+            match self.get_series_link(series_id) {
+                Some(series_link) => format!(
+                    "{} - {}.{}",
+                    series_link.part_in_series,
+                    self.title,
+                    format.to_string().to_lowercase()
+                ),
+                None => non_series_filename
+            }
         } else {
-            format!("{}.{}", self.title, format.to_string().to_lowercase())
+            non_series_filename
         }
     }
 
     pub async fn parse_work(id: &str, user: &User, config: &Config, fandom_override: Option<&str>) -> Result<Work> {
-        println!("loading work {}", id);
-        let document = get_page(id, None, user).await.expect("Failed to get the requested page");
+        println!("loading work {id}");
+        let document = get_page(id, None, user).await?;
         println!("Got AO3 response");
 
         let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
@@ -92,12 +95,13 @@ impl Work {
             .expect("Error parsing part in series");
         
         let test = document.html();
-        println!("{}", test);
+        println!("{test}");
 
+        //TODO check for ssl error
         let title: String = document
             .select(&title_selector)
             .next()
-            .unwrap()
+                .with_context(|| format!("Could not find title for work {id}"))?
             .text()
             .collect();
         let author: String = document
@@ -148,7 +152,7 @@ impl Work {
                     .value()
                     .attr("href")
                     .unwrap()
-                    .split_terminator("/")
+                    .split_terminator('/')
                     .nth(2)
                     .unwrap()
                     .to_owned();
@@ -181,7 +185,7 @@ impl Work {
 
         Ok(Work {
             id: id.to_owned(),
-            title: Self::cleanup_title(title),
+            title: Self::cleanup_title(&title),
             author,
             download_links,
             fandoms: fandoms.clone(),
@@ -198,7 +202,7 @@ impl Work {
 
     pub fn parse_work_from_blurb(
         blurb: ElementRef,
-        series_name: &String,
+        series_name: &str,
         config: &Config,
     ) -> Result<Work> {
         let heading_selector = Selector::parse("h4.heading>a").expect("Error parsing heading");
@@ -213,17 +217,17 @@ impl Work {
         let series_selector = Selector::parse("ul.series>li").expect("Error parsing series");
 
         let mut heading = blurb.select(&heading_selector);
-        let title_element = heading.next().unwrap();
+        let title_element = heading.next().context("Could not find title for work")?;
         let id: String = title_element
             .attr("href")
-            .unwrap()
-            .split_terminator("/")
+            .context("Could not find id for work in blurb")?
+            .split_terminator('/')
             .nth(2)
-            .unwrap()
+            .context("Could not find id for work in blurb")?
             .to_owned();
         let title: String = title_element.text().collect();
 
-        println!("  Parsing work {} - {}", id, title);
+        println!("  Parsing work {id} - {title}");
 
         let author: String = if let Some(element) = heading.next() {
             element.text().collect()
@@ -276,7 +280,7 @@ impl Work {
                     .value()
                     .attr("href")
                     .unwrap()
-                    .split_terminator("/")
+                    .split_terminator('/')
                     .nth(2)
                     .unwrap()
                     .to_owned();
@@ -284,7 +288,7 @@ impl Work {
                 (
                     series_id.clone(),
                     SeriesLink {
-                        series_name: series_name.clone(),
+                        series_name: series_name.to_string(),
                         series_id,
                         part_in_series,
                     },
@@ -295,8 +299,8 @@ impl Work {
         println!("  Work parsed\n");
 
         Ok(Work {
-            id: id.to_owned(),
-            title: Self::cleanup_title(title),
+            id: id.clone(),
+            title: Self::cleanup_title(&title),
             author,
             download_links,
             fandoms: fandoms.clone(),
@@ -314,28 +318,37 @@ impl Work {
         format: DownloadFormat,
         series_id: Option<&String>,
         user: &User,
-    ) -> std::io::Result<()> {
+    ) -> Result<()> {
         let download_link = self.download_links[&format].clone();
-        println!("Download link: {}", download_link);
+        println!("Download link: {download_link}");
 
         let work = user.client
-            .get(download_link)
+            .get(&download_link)
             .send()
             .await
-            .unwrap()
+            .with_context(|| format!("Error downloading work {} from {download_link}", self.title))?
             .bytes()
             .await
-            .unwrap();
+            .with_context(|| format!("Error converting work {} to bytes", self.title))?;
         let download_path = download_folder.join(self.get_filename(format, series_id));
 
         println!("Downloading to: {}", download_folder.to_str().unwrap());
 
-        let mut work_file = File::create(download_path).await?;
-        work_file.write_all(&work).await?;
+        let mut work_file = File::create(&download_path).await
+            .with_context(|| format!(
+                "Error creating file for work {} at {}", self.title,
+                download_path.display()
+            ))?;
+        work_file.write_all(&work).await
+            .with_context(|| format!(
+                "Error writing file for work {} at {}",
+                self.title,
+                download_path.display()
+            ))?;
         Ok(())
     }
     
-    fn cleanup_title(title: String) -> String {
+    fn cleanup_title(title: &str) -> String {
         title
             .trim()
             .chars()
@@ -350,22 +363,22 @@ pub fn test_work(title: String, fandom: String, series: Option<&str>, part_in_se
             Work {
                 id: "1".to_owned(),
                 title,
-                author: "".to_string(),
-                download_links: Default::default(),
+                author: String::new(),
+                download_links: HashMap::default(),
                 fandoms: vec![],
                 filtered_fandom: fandom,
                 relationships: vec![],
                 characters: vec![],
                 additional_tags: vec![],
-                series: Default::default(),
+                series: HashMap::default(),
             }
         }
         Some(_) => {
             Work {
                 id: "1".to_owned(),
                 title,
-                author: "".to_string(),
-                download_links: Default::default(),
+                author: String::new(),
+                download_links: HashMap::default(),
                 fandoms: vec![],
                 filtered_fandom: fandom,
                 relationships: vec![],

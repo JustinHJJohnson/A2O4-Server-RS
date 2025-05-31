@@ -1,10 +1,11 @@
 use crate::{ao3::user::User, config::Config};
 
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use enum_iterator::Sequence;
 use reqwest;
 use scraper::{Html, Selector};
 use std::collections::HashSet;
+use std::str::FromStr;
 use regex::Regex;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,29 @@ pub enum DownloadFormat {
     HTML,
 }
 
+#[derive(EnumString, PartialEq, Debug)]
+pub enum PageType {
+    #[strum(serialize = "works")]
+    Work,
+    #[strum(serialize = "series")]
+    Series
+}
+
+impl std::fmt::Display for PageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PageType::Work => write!(f, "work"),
+            _ => write!(f, "series")
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct UrlInfo {
+    pub page_type: PageType,
+    pub id: String
+}
+
 //TODO check for SSL error page, proxy error page, timeout page
 pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
     let url = if let Some(i) = page {
@@ -40,53 +64,66 @@ pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
         format!("https://archiveofourown.org/works/{id}")
     };
 
-    let response = request_with_user(url, user).await;
+    let response = request_with_user(url.clone(), user).await.
+        with_context(|| format!("Failed to fetch page {url}"))?;
 
     if response.url().as_str() == "https://archiveofourown.org/users/login?restricted=true" {
         eprint!("This work/series is restricted and requires an AO3 account");
         return Err(Error::msg("Restricted Error"));
     }
+    
+    if response.status() == 525 {
+        return Err(Error::msg("Cloudflare SSL Error"));
+    }
+    
+    println!("response code: {}", response.status());
 
     let html_content = Html::parse_document(&response.text().await?);
 
-    let error_404_selector = Selector::parse("div.errors").unwrap();
-    
-    let error_check = html_content.select(&error_404_selector).next();
-    
-    if error_check.is_some() {
-        let error = error_check.unwrap()
-            .text()
-            .collect::<String>();
+    let errors_selector = Selector::parse("div.errors");
 
-        if error == "Error 404" {
-            eprintln!("This url does not lead to a valid work/series");
-            return Err(Error::msg("URL Error"));
-        }
+    let error_404: String = match errors_selector {
+        Ok(errors_selector) => {
+            if let Some(e) = html_content.select(&errors_selector).next() {
+                e.text().collect::<String>()
+            } else {
+                String::new()
+            }
+        },
+        _ => String::new()
+    };
+    
+    if error_404.is_empty() {
+        Ok(html_content)
+    } else {
+        Err(Error::msg(format!("Got error {error_404} while fetching {url}")))
     }
-
-    Ok(html_content)
 }
 
 pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
     let url = format!("https://archiveofourown.org/series/{id}");
-    let response = request_with_user(url, user).await;
+    let response = request_with_user(url.clone(), user).await
+        .with_context(|| format!("Failed to fetch series page {url}"))?;
     
     if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("This url does not lead to a valid work/series");
-        return Err(Error::msg("URL Error"));
+        let message = format!("URL {url} is not a valid series page");
+        eprintln!("{message}");
+        return Err(Error::msg(message));
     }
 
-    let response_text = response.text().await.unwrap();
+    let response_text = response.text().await
+        .with_context(|| format!("Failed to get response text for {url}"))?;
     let num_pages: u8 = if response_text.contains("Pages Navigation") {
         let response_substring = response_text
             .split("Pages Navigation")
             .nth(1)
-            .unwrap()
+            .with_context(|| format!("Failed to page selector for {url}"))?
             .split('\n')
             .next()
-            .unwrap();
+            .with_context(|| format!("Failed to page selector for {url}"))?;
 
-        Regex::new(r">\d+<")?.captures_iter(response_substring).count() as u8
+        u8::try_from(Regex::new(r">\d+<")?.captures_iter(response_substring).count())
+            .with_context(|| format!("Failed to parse num of pages for {url}"))?
     } else {
         1
     };
@@ -96,7 +133,8 @@ pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
     //TODO should probably check all these responses are successes
     for page in 2..=num_pages {
         let url = format!("https://archiveofourown.org/series/{id}?page={page}");
-        let response = request_with_user(url, user).await;
+        let response = request_with_user(url.clone(), user).await
+            .with_context(|| format!("Failed to fetch series page {url}"))?;
         raw_html.push(response.text().await?);
     }
 
@@ -139,14 +177,27 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
 }
 
 //TODO setup rate limit of 12 per minute
-async fn request_with_user(url: String, user: &User) -> Response {
-    user.client.get(url).send().await.unwrap() //TODO do error handling, maybe with passed in error message
+async fn request_with_user(url: String, user: &User) -> std::result::Result<Response, reqwest::Error> {
+    user.client.get(url).send().await
 }
 
-//TODO use regex on the raw string instead
-pub fn parse_url(url: &Url) -> (String, String) {
-    let mut url_path_segments = url.path_segments().unwrap().rev();
-    (url_path_segments.next().unwrap().into(), url_path_segments.next().unwrap().into())
+pub fn parse_url(url: &Url) -> Result<UrlInfo> {
+    if url.domain() != Some("archiveofourown.org") {
+        return Err(Error::msg("Provided URL is not an AO3 URL"))
+    }
+    
+    let re = Regex::new(r"(?<type>works|series)/(?<id>\d+)").unwrap();
+    println!("{}", url.as_str());
+    let Some(caps) = re.captures(url.as_str()) else {
+        let message = format!("URL {url} is not for a work or series");
+        eprintln!("{message}");
+        return Err(Error::msg(message))
+    };
+    Ok(UrlInfo {
+        page_type: PageType::from_str(&caps["type"])
+            .with_context(|| format!("Invalid page type {}", &caps["type"]))?,
+        id: caps["id"].to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -154,6 +205,46 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use indexmap::IndexMap;
+    
+    #[test]
+    fn parse_valid_work_url() {
+        assert_eq!(
+            parse_url(&Url::parse("https://archiveofourown.org/works/123456").unwrap()).unwrap(),
+            UrlInfo { page_type: PageType::Work, id: "123456".to_string() }
+        );
+    }
+
+    #[test]
+    fn parse_series_url() {
+        assert_eq!(
+            parse_url(&Url::parse("https://archiveofourown.org/series/123456").unwrap()).unwrap(),
+            UrlInfo { page_type: PageType::Series, id: "123456".to_string() }
+        );
+    }
+
+    #[test]
+    fn parse_work_in_collection_url() {
+        assert_eq!(
+            parse_url(&Url::parse("https://archiveofourown.org/collections/aaaaa/works/654321").unwrap()).unwrap(),
+            UrlInfo { page_type: PageType::Work, id: "654321".to_string() }
+        );
+    }
+    
+    #[test]
+    fn error_on_non_ao3_url() {
+        assert_eq!(
+            parse_url(&Url::parse("https://google.com").unwrap()).unwrap_err().to_string(),
+            "Provided URL is not an AO3 URL"
+        );
+    }
+
+    #[test]
+    fn error_on_invalid_ao3_url() {
+        assert_eq!(
+            parse_url(&Url::parse("https://archiveofourown.org/users/bob").unwrap()).unwrap_err().to_string(),
+            "URL https://archiveofourown.org/users/bob is not for a work or series"
+        );
+    }
 
     #[test]
     fn map() {

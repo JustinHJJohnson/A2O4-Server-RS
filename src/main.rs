@@ -3,7 +3,7 @@ mod config;
 mod sftp;
 
 
-use crate::ao3::common::{parse_url, DownloadFormat};
+use crate::ao3::common::{parse_url, DownloadFormat, PageType};
 use crate::ao3::series::Series;
 use crate::ao3::user;
 use crate::ao3::work::{test_work, Work};
@@ -20,6 +20,7 @@ use url::Url;
 #[macro_use]
 extern crate rocket;
 
+
 #[derive(Deserialize)]
 struct DownloadRequest<'r> {
     url: &'r str,
@@ -33,55 +34,64 @@ async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) 
         return (Status::BadRequest, String::from("Could not parse provided URL"));
     };
     
-    let (id, url_type) = parse_url(&url);
-
-    if url.host_str().unwrap() != "archiveofourown.org" {
-        return (Status::BadRequest, String::from("URL has invalid host"));
-    }
-    if url_type != "works" && url_type != "series" {
-        return (Status::BadRequest, String::from("URL is not for a series or work"));
-    }
+    let url_info = match parse_url(&url) {
+        Ok(url_info) => url_info,
+        Err(error) => return (Status::BadRequest, error.to_string())
+    };
 
     let config = match read_config().await {
         Ok(config) => config,
         Err(error) => {
-            return (Status::InternalServerError, format!("Config Error: {}", error))
+            return (Status::InternalServerError, format!("Config Error: {error}"))
         }
     };
     
     let device = config.get_device_by_name_or_first(request.device);
 
-    //TODO actually check for download errors
-    match url_type.as_str() {
-        "works" => {
-            let work = Work::parse_work(&id, user, &config, request.fandom_override)
-                .await
-                .unwrap();
-            let _ = work
+    match url_info.page_type {
+        PageType::Work => {
+            let work_result = Work::parse_work(&url_info.id, user, &config, request.fandom_override).await;
+            let Ok(work) = work_result else {
+                return (Status::BadRequest, work_result.err().unwrap().to_string());
+            };
+            let download_result = work
                 .download(Path::new(&config.download_path), DownloadFormat::EPUB, None, user)
                 .await;
-            upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await
-        }
-        "series" => {
-            let series = Series::parse_series(&id, user, &config)
-                .await
-                .unwrap();
-            let _ = series
+            let Ok(()) = download_result else {
+              return (Status::BadRequest, download_result.err().unwrap().to_string());  
+            };
+            let upload_result = upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await;
+            let Ok(()) = upload_result else {
+                return (Status::BadRequest, upload_result.err().unwrap().to_string());
+            };
+            
+        },
+        PageType::Series => {
+            let series_result = Series::parse_series(&url_info.id, user, &config).await;
+            let Ok(series) = series_result else {
+                return (Status::BadRequest, series_result.err().unwrap().to_string());
+            };
+            let download_result = series
                 .download(Path::new(&config.download_path), DownloadFormat::EPUB, user)
                 .await;
-            upload_series(&series, device, &config, DownloadFormat::EPUB).await
-        }
-        _ => unreachable!(),
-    };
-
-    match user.write_cookies() {
-        Ok(_) => {},
-        Err(error) => {
-            return (Status::InternalServerError, format!("File error while writing cookies: {}", error))
+            let Ok(()) = download_result else {
+                return (Status::BadRequest, download_result.err().unwrap().to_string());
+            };
+            let upload_result = upload_series(&series, device, &config, DownloadFormat::EPUB).await;
+            let Ok(()) = upload_result else {
+                return (Status::BadRequest, upload_result.err().unwrap().to_string());
+            };
         }
     }
 
-    (Status::Ok, format!("Successfully downloaded {url_type} with id {id}"))
+    match user.write_cookies() {
+        Ok(()) => {},
+        Err(error) => {
+            return (Status::InternalServerError, format!("File error while writing cookies: {error}"))
+        }
+    }
+
+    (Status::Ok, format!("Successfully downloaded {} with id {}", url_info.page_type, url_info.id))
 }
 
 #[derive(Deserialize)]
@@ -98,7 +108,7 @@ async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {
     let config = match read_config().await {
         Ok(config) => config,
         Err(error) => {
-            return (Status::InternalServerError, format!("Config Error: {}", error))
+            return (Status::InternalServerError, format!("Config Error: {error}"))
         }
     };
     
@@ -106,10 +116,20 @@ async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {
     
     let work = test_work(request.work.to_owned(), request.fandom.to_owned(), request.series, request.part_in_series);
     
-    match request.series {
-        None => { upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await }
-        Some(_) => { upload_work(&work, device, &config, DownloadFormat::EPUB, None, Some(&"1".to_owned())).await }
-    }
+    if request.series.is_some() {
+        let upload_result = upload_work(&work, device, &config, DownloadFormat::EPUB, None, Some(&"1".to_owned())).await;
+        let Ok(()) = upload_result else {
+            return (Status::BadRequest, upload_result.err().unwrap().to_string());
+        };
+    } else {
+        let upload_result = upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await;
+        let Ok(()) = upload_result else {
+            let error = upload_result.err().unwrap();
+            println!("{}", error.root_cause());
+            return (Status::BadRequest, error.to_string());
+        };
+    } 
+           
 
     (Status::Ok, format!("Successfully uploaded {} to {}", request.work, request.device.unwrap()))
 }
@@ -123,7 +143,7 @@ async fn rocket() -> _ {
             let user = match user::get_user(config).await {
                 Ok(user) => user,
                 Err(error) => {
-                    eprintln!("User Error: {}", error);
+                    eprintln!("User Error: {error}");
                     std::process::exit(1);
                 }
             };
@@ -139,7 +159,7 @@ async fn rocket() -> _ {
                 .mount("/", routes![upload])
         },
         Err(error) => {
-            eprintln!("Config Error: {}", error);
+            eprintln!("Config Error: {error}");
             std::process::exit(1)
         }
     }

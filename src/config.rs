@@ -51,18 +51,17 @@ pub async fn read_config() -> Result<Config, String> {
     if let Some(proj_dirs) = ProjectDirs::from("", "", env!("CARGO_PKG_NAME")) {
         let config_dir = proj_dirs.config_dir();
         if config_dir.exists() {
-            let mut file = match File::open(config_dir.join("config.toml")) {
-                Ok(file) => file,
-                Err(_) => return Err(format!(
+            let Ok(mut file) = File::open(config_dir.join("config.toml")) else { 
+                return Err(format!(
                     "Failed to open config.toml at {}, make sure the file exists and has the right permissions",
                     config_dir.display()
-                )),
+                ))
             };
             let mut file_contents = String::new();
             let read_result = file.read_to_string(&mut file_contents);
             if read_result.is_err() {
                 return Err(read_result.err().unwrap().to_string());
-            };
+            }
 
             match toml::from_str::<Config>(&file_contents) {
                 Ok(config) => Ok(config),
