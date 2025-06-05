@@ -113,7 +113,7 @@ pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
 
     let response_text = response.text().await
         .with_context(|| format!("Failed to get response text for {url}"))?;
-    let num_pages: u8 = if response_text.contains("Pages Navigation") {
+    let num_pages = if response_text.contains("Pages Navigation") {
         let response_substring = response_text
             .split("Pages Navigation")
             .nth(1)
@@ -130,7 +130,6 @@ pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
     
     let mut raw_html: Vec<String> = vec![response_text];
 
-    //TODO should probably check all these responses are successes
     for page in 2..=num_pages {
         let url = format!("https://archiveofourown.org/series/{id}?page={page}");
         let response = request_with_user(url.clone(), user).await
@@ -187,12 +186,12 @@ pub fn parse_url(url: &Url) -> Result<UrlInfo> {
     }
     
     let re = Regex::new(r"(?<type>works|series)/(?<id>\d+)").unwrap();
-    println!("{}", url.as_str());
     let Some(caps) = re.captures(url.as_str()) else {
         let message = format!("URL {url} is not for a work or series");
         eprintln!("{message}");
         return Err(Error::msg(message))
     };
+    
     Ok(UrlInfo {
         page_type: PageType::from_str(&caps["type"])
             .with_context(|| format!("Invalid page type {}", &caps["type"]))?,
@@ -248,23 +247,15 @@ mod tests {
 
     #[test]
     fn map() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::from([
+        let config = Config::new()
+            .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
                 (
                     "Fandom 2 the big boy returns".to_owned(),
                     "Fandom 2".to_owned(),
                 ),
-            ]),
-            fandom_filter: IndexMap::new(),
-        };
+            ]));
 
         assert_eq!(
             filter_fandoms(
@@ -277,23 +268,15 @@ mod tests {
 
     #[test]
     fn map_lets_unmatched_fandoms_through() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::from([
+        let config = Config::new()
+            .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
                 (
                     "Fandom 2 the big boy returns".to_owned(),
                     "Fandom 2".to_owned(),
                 ),
-            ]),
-            fandom_filter: IndexMap::new(),
-        };
+            ]));
 
         assert_eq!(
             filter_fandoms(
@@ -306,23 +289,16 @@ mod tests {
 
     #[test]
     fn map_removes_all() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::from([
+        let config = Config::new()
+            .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
                 (
                     "Fandom 2 the big boy returns".to_owned(),
                     "Fandom 2".to_owned(),
                 ),
-            ]),
-            fandom_filter: IndexMap::from([("Fandom 1".to_owned(), vec!["*".to_owned()])]),
-        };
+            ]))
+            .fandom_filter(IndexMap::from([("Fandom 1".to_owned(), vec!["*".to_owned()])]));
 
         assert_eq!(
             filter_fandoms(
@@ -340,26 +316,19 @@ mod tests {
 
     #[test]
     fn map_applies_in_order() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::from([
+        let config = Config::new()
+            .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
                 (
                     "Fandom 2 the big boy returns".to_owned(),
                     "Fandom 2".to_owned(),
                 ),
-            ]),
-            fandom_filter: IndexMap::from([
+            ]))
+            .fandom_filter(IndexMap::from([
                 ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
                 ("Fandom 2".to_owned(), vec!["Fandom 1".to_owned()]),
-            ]),
-        };
+            ]));
 
         assert_eq!(
             filter_fandoms(
@@ -375,19 +344,11 @@ mod tests {
 
     #[test]
     fn filter() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::new(),
-            fandom_filter: IndexMap::from([
+        let config = Config::new()
+            .fandom_filter(IndexMap::from([
                 ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
                 ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-            ]),
-        };
+            ]));
 
         assert_eq!(
             filter_fandoms(&vec!["Fandom 1".to_owned(), "Fandom 2".to_owned()], &config),
@@ -397,26 +358,19 @@ mod tests {
 
     #[test]
     fn map_and_filter() {
-        let config = Config {
-            port: 1,
-            download_path: "some folder/some file".to_owned(),
-            ao3_username: Some("test".to_owned()),
-            ao3_password: Some("test".to_owned()),
-            default_format: DownloadFormat::EPUB,
-            devices: Vec::new(),
-            fandom_map: HashMap::from([
+        let config = Config::new()
+            .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
                 (
                     "Fandom 2 the big boy returns".to_owned(),
                     "Fandom 2".to_owned(),
                 ),
-            ]),
-            fandom_filter: IndexMap::from([
+            ]))
+            .fandom_filter(IndexMap::from([
                 ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
                 ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-            ]),
-        };
+            ]));
 
         assert_eq!(
             filter_fandoms(

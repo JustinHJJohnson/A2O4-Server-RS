@@ -79,15 +79,11 @@ impl User {
         if let Some(proj_dirs) = ProjectDirs::from("", "", env!("CARGO_PKG_NAME")) {
             let config_dir = proj_dirs.config_dir();
             let  cookie_store = {
-                if let Ok(file) = std::fs::File::open(Path::new(&config_dir.join("cookies.json")))
-                    .map(std::io::BufReader::new)
-                    {
-                        reqwest_cookie_store::CookieStore::load_json(file).unwrap()
-                    }
-                    else
-                    {
-                        reqwest_cookie_store::CookieStore::new(None)
-                    }
+                if let Ok(file) = std::fs::File::open(Path::new(&config_dir.join("cookies.json"))).map(std::io::BufReader::new) {
+                    reqwest_cookie_store::CookieStore::load_json(file).unwrap()
+                } else {
+                    reqwest_cookie_store::CookieStore::new(None)
+                }
             };
             let cookie_store = CookieStoreMutex::new(cookie_store);
             Ok(Arc::new(cookie_store))

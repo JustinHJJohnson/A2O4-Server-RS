@@ -20,6 +20,19 @@ pub struct Config {
 }
 
 impl Config {
+    pub(crate) fn new() -> Self {
+        Self {
+            port: Default::default(),
+            download_path: Default::default(),
+            ao3_username: Default::default(),
+            ao3_password: Default::default(),
+            default_format: DownloadFormat::EPUB,
+            devices: Default::default(),
+            fandom_map: Default::default(),
+            fandom_filter: Default::default(),
+        }
+    }
+    
     pub fn get_device_by_name(&self, name: &str) -> Option<&Device> {
         self.devices.iter().find(|d| d.name == name)
     }
@@ -33,6 +46,46 @@ impl Config {
         } else {
             self.devices.first().unwrap()
         }
+    }
+    
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+    
+    pub fn download_path(mut self, download_path: String) -> Self {
+        self.download_path = download_path;
+        self
+    }
+    
+    pub fn ao3_username(mut self, username: String) -> Self {
+        self.ao3_username = Some(username);
+        self
+    }
+    
+    pub fn ao3_password(mut self, password: String) -> Self {
+        self.ao3_password = Some(password);
+        self
+    }
+    
+    pub fn default_format(mut self, format: DownloadFormat) -> Self {
+        self.default_format = format;
+        self
+    }
+    
+    pub fn devices(mut self, devices: Vec<Device>) -> Self {
+        self.devices = devices;
+        self
+    }
+    
+    pub fn fandom_map(mut self, fandom_map: HashMap<String, String>) -> Self {
+        self.fandom_map = fandom_map;
+        self
+    }
+    
+    pub fn fandom_filter(mut self, fandom_filter: IndexMap<String, Vec<String>>) -> Self {
+        self.fandom_filter = fandom_filter;
+        self
     }
 }
 
