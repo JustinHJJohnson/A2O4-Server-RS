@@ -199,6 +199,14 @@ pub fn parse_url(url: &Url) -> Result<UrlInfo> {
     })
 }
 
+pub fn sanitise_string(string: &str) -> String {
+    string
+        .trim()
+        .chars()
+        .filter(|c| !['!', '?', ':'].contains(c))
+        .collect::<String>()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

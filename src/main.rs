@@ -3,6 +3,7 @@ mod config;
 mod sftp;
 
 
+use std::ffi::OsStr;
 use crate::ao3::common::{parse_url, DownloadFormat, PageType};
 use crate::ao3::series::Series;
 use crate::ao3::user;
@@ -10,12 +11,18 @@ use crate::ao3::work::{test_work, Work};
 use crate::config::read_config;
 use crate::sftp::{upload_series, upload_work};
 
-use std::path::Path;
+use epub::doc::EpubDoc;
 use rocket::http::Status;
 use rocket::serde::json::Json;
-use serde::Deserialize;
 use rocket::State;
+use serde::Deserialize;
+use serde_json::to_string_pretty;
+use std::io::prelude::*;
+use std::fs::{File, read_dir};
+use std::path::Path;
+use rocket::futures::future::err;
 use url::Url;
+use log::error;
 
 #[macro_use]
 extern crate rocket;
@@ -48,6 +55,7 @@ async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) 
     
     let device = config.get_device_by_name_or_first(request.device);
 
+    //TODO should also log any errors
     match url_info.page_type {
         PageType::Work => {
             let work_result = Work::parse_work(&url_info.id, user, &config, request.fandom_override).await;
@@ -134,6 +142,11 @@ async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {
     (Status::Ok, format!("Successfully uploaded {} to {}", request.work, request.device.unwrap()))
 }
 
+#[get("/healthcheck")]
+fn healthcheck() -> (Status, String) {
+    (Status::Ok, "A2O4 is running".to_string())
+}
+
 #[launch]
 async fn rocket() -> _ {
     match read_config().await {
@@ -157,10 +170,25 @@ async fn rocket() -> _ {
                 .manage(user)
                 .mount("/", routes![download])
                 .mount("/", routes![upload])
+                .mount("/", routes![healthcheck])
         },
         Err(error) => {
             eprintln!("Config Error: {error}");
             std::process::exit(1)
+        }
+    }
+}
+
+fn write_epub_metadata_to_json() {
+    let files = read_dir("downloads").unwrap();
+    for file in files {
+        let file = file.unwrap();
+        let path = file.path();
+        if !path.is_dir() && path.extension() == Some(OsStr::new("epub")) {
+            let doc = EpubDoc::new(&path).unwrap();
+            //doc.metadata.insert()
+            let mut metadata_file = File::create(path.with_extension("json")).unwrap();
+            metadata_file.write_all(&to_string_pretty(&doc.metadata).unwrap().into_bytes()).unwrap();
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::ao3::common::{filter_fandoms, get_page, DownloadFormat};
+use crate::ao3::common::{filter_fandoms, get_page, sanitise_string, DownloadFormat};
 use crate::ao3::user::User;
 use crate::config::Config;
 
@@ -160,13 +160,15 @@ impl Work {
                 (
                     series_id.clone(),
                     SeriesLink {
-                        series_name: series_name_element
-                            .text()
-                            .collect::<String>()
-                            .split_whitespace()
-                            .filter(|chunk| *chunk != "series")
-                            .collect::<Vec<&str>>()
-                            .join(" "),
+                        series_name: sanitise_string(
+                            &series_name_element
+                                .text()
+                                .collect::<String>()
+                                .split_whitespace()
+                                .filter(|chunk| *chunk != "series")
+                                .collect::<Vec<&str>>()
+                                .join(" ")
+                        ),
                         series_id,
                         part_in_series: series
                             .text()
@@ -185,7 +187,7 @@ impl Work {
 
         Ok(Work {
             id: id.to_owned(),
-            title: Self::cleanup_title(&title),
+            title: sanitise_string(&title),
             author,
             download_links,
             fandoms: fandoms.clone(),
@@ -288,7 +290,7 @@ impl Work {
                 (
                     series_id.clone(),
                     SeriesLink {
-                        series_name: series_name.to_string(),
+                        series_name: sanitise_string(series_name),
                         series_id,
                         part_in_series,
                     },
@@ -300,7 +302,7 @@ impl Work {
 
         Ok(Work {
             id: id.clone(),
-            title: Self::cleanup_title(&title),
+            title: sanitise_string(&title),
             author,
             download_links,
             fandoms: fandoms.clone(),
@@ -347,14 +349,6 @@ impl Work {
             ))?;
         Ok(())
     }
-    
-    fn cleanup_title(title: &str) -> String {
-        title
-            .trim()
-            .chars()
-            .filter(|c| !['!', '?', ':'].contains(c))
-            .collect::<String>()
-    }
 }
 
 pub fn test_work(title: String, fandom: String, series: Option<&str>, part_in_series: Option<&str>) -> Work {
@@ -392,5 +386,4 @@ pub fn test_work(title: String, fandom: String, series: Option<&str>, part_in_se
             }
         }
     }
-    
 }

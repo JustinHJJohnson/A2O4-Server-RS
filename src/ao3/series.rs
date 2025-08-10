@@ -1,4 +1,5 @@
 use crate::ao3::common::{filter_fandoms, get_series_pages, DownloadFormat};
+use crate::ao3::common::{filter_fandoms, get_series_pages, sanitise_string, DownloadFormat};
 use crate::ao3::user::User;
 use crate::ao3::work::Work;
 use crate::config::Config;
@@ -54,7 +55,7 @@ impl std::fmt::Display for Series {
 
 impl Series {
     pub async fn parse_series(id: &str, user: &User, config: &Config) -> Result<Series> {
-        println!("Loading series {}", id);
+        println!("Loading series {id}");
         let all_pages = get_series_pages(id, user).await?;
         println!("Got AO3 response");
         let document = all_pages.first().unwrap();
@@ -139,11 +140,11 @@ impl Series {
         let num_words: u32 = raw_num_words
             .replace(&[',', '.'][..], "")
             .parse()
-            .unwrap_or_else(|_| panic!("Failed to convert {} to u32", raw_num_words));
+            .unwrap_or_else(|_| panic!("Failed to convert {raw_num_words} to u32"));
         let num_works: u32 = raw_num_works
             .replace(&[',', '.'][..], "")
             .parse()
-            .unwrap_or_else(|_| panic!("Failed to convert {} to u32", raw_num_works));
+            .unwrap_or_else(|_| panic!("Failed to convert {raw_num_works} to u32"));
         let is_completed: bool = match raw_is_completed.as_str() {
             "Yes" => true,
             "No" => false,
@@ -152,13 +153,13 @@ impl Series {
         let num_bookmarks: u32 = raw_num_bookmarks
             .replace(&[',', '.'][..], "")
             .parse()
-            .unwrap_or_else(|_| panic!("Failed to convert {} to u32", raw_num_bookmarks));
+            .unwrap_or_else(|_| panic!("Failed to convert {raw_num_bookmarks} to u32"));
 
         let mut works = Vec::new();
         let mut authors = HashSet::new();
         let mut fandoms = HashSet::new();
 
-        for page in all_pages.into_iter() {
+        for page in all_pages {
             for work in page.select(&work_selector) {
                 let work_id = work
                     .value()
@@ -167,7 +168,7 @@ impl Series {
                     .chars()
                     .skip(5)
                     .collect::<String>();
-                println!("  Found work {}", work_id);
+                println!("  Found work {work_id}");
                 let parsed_work = Work::parse_work_from_blurb(work, &title, config)?;
                 fandoms.extend(parsed_work.fandoms.clone());
                 authors.insert(parsed_work.author.clone());
@@ -179,7 +180,7 @@ impl Series {
 
         Ok(Series {
             id: id.to_owned(),
-            title,
+            title: sanitise_string(&title),
             creator,
             series_begun,
             series_updated,
@@ -208,7 +209,7 @@ impl Series {
         };
         for work in &self.works {
             let _ = work.download(&series_path, format, Some(&self.id), user).await;
-            println!()
+            println!();
         };
         Ok(())
     }
