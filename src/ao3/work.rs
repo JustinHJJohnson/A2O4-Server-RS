@@ -51,6 +51,43 @@ impl std::fmt::Display for Work {
 }
 
 impl Work {
+    pub fn test_work(title: &str, fandom: &str, series: Option<&str>, part_in_series: Option<u8>) -> Self {
+        match series {
+            None => {
+                Self {
+                    id: "1".to_owned(),
+                    title: title.to_string(),
+                    author: String::new(),
+                    download_links: HashMap::default(),
+                    fandoms: vec![],
+                    filtered_fandom: fandom.to_string(),
+                    relationships: vec![],
+                    characters: vec![],
+                    additional_tags: vec![],
+                    series: HashMap::default(),
+                }
+            }
+            Some(_) => {
+                Self {
+                    id: "1".to_owned(),
+                    title: title.to_string(),
+                    author: String::new(),
+                    download_links: HashMap::default(),
+                    fandoms: vec![],
+                    filtered_fandom: fandom.to_string(),
+                    relationships: vec![],
+                    characters: vec![],
+                    additional_tags: vec![],
+                    series: HashMap::from([("1".to_owned(), SeriesLink {
+                        series_id: "1".to_string(),
+                        series_name: series.unwrap().to_owned(),
+                        part_in_series: part_in_series.unwrap(),
+                    })]),
+                }
+            }
+        }
+    }
+    
     pub fn get_series_link(&self, series_id: &String) -> Option<&SeriesLink> {
         self.series.get(series_id)
     }
@@ -348,42 +385,5 @@ impl Work {
                 download_path.display()
             ))?;
         Ok(())
-    }
-}
-
-pub fn test_work(title: String, fandom: String, series: Option<&str>, part_in_series: Option<&str>) -> Work {
-    match series {
-        None => {
-            Work {
-                id: "1".to_owned(),
-                title,
-                author: String::new(),
-                download_links: HashMap::default(),
-                fandoms: vec![],
-                filtered_fandom: fandom,
-                relationships: vec![],
-                characters: vec![],
-                additional_tags: vec![],
-                series: HashMap::default(),
-            }
-        }
-        Some(_) => {
-            Work {
-                id: "1".to_owned(),
-                title,
-                author: String::new(),
-                download_links: HashMap::default(),
-                fandoms: vec![],
-                filtered_fandom: fandom,
-                relationships: vec![],
-                characters: vec![],
-                additional_tags: vec![],
-                series: HashMap::from([("1".to_owned(), SeriesLink{
-                    series_id: "1".to_string(),
-                    series_name: series.unwrap().to_owned(),
-                    part_in_series: part_in_series.unwrap().parse::<u8>().unwrap(),
-                })]),
-            }
-        }
     }
 }

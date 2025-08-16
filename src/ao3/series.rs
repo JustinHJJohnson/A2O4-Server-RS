@@ -1,4 +1,3 @@
-use crate::ao3::common::{filter_fandoms, get_series_pages, DownloadFormat};
 use crate::ao3::common::{filter_fandoms, get_series_pages, sanitise_string, DownloadFormat};
 use crate::ao3::user::User;
 use crate::ao3::work::Work;
@@ -7,8 +6,9 @@ use crate::config::Config;
 use anyhow::Result;
 use scraper::Selector;
 use std::collections::HashSet;
+use std::fs::read_dir;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs::create_dir;
 
 pub struct Series {
@@ -54,6 +54,60 @@ impl std::fmt::Display for Series {
 }
 
 impl Series {
+    pub fn test_series(title: &str, fandom: &str, config: &Config) -> Result<Series> {
+        let (works, num_works) = Self::load_series_works_from_local(title, fandom, config)?;
+
+        Ok(
+            Series {
+                id: "1".to_owned(),
+                title: sanitise_string(title),
+                creator: "bob".to_owned(),
+                series_begun: "at some point".to_owned(),
+                series_updated: "sure".to_owned(),
+                description: "yes".to_owned(),
+                num_words: 1,
+                num_works,
+                is_completed: true,
+                num_bookmarks: 0,
+                works,
+                authors: HashSet::from(["yes".to_string()]),
+                fandoms: HashSet::from(["yes".to_string()]),
+                filtered_fandom: fandom.to_string(),
+            }
+        )
+    }
+
+    fn load_series_works_from_local(title: &str, fandom: &str, config: &Config) -> Result<(Vec<Work>, u32)> {
+        let series_path = Path::new(&config.download_path).join(title);
+        let works = read_dir(series_path.clone())?;
+        let mut num_works = 0;
+
+        Ok(
+            (
+                works.map(
+                    |work| {
+                        num_works += 1;
+                        let binding = Into::<PathBuf>::into(work.unwrap().file_name());
+                        let (num_in_series, work_title) = binding
+                            .file_stem()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .split_once(" - ")
+                            .unwrap();
+                        Work::test_work(
+                            work_title,
+                            fandom,
+                            Some(title),
+                            Some(num_in_series.parse::<u8>().unwrap()),
+                        )
+                    }
+                ).collect(),
+                num_works
+            )
+        )
+    }
+
     pub async fn parse_series(id: &str, user: &User, config: &Config) -> Result<Series> {
         println!("Loading series {id}");
         let all_pages = get_series_pages(id, user).await?;
@@ -79,6 +133,9 @@ impl Series {
 
         let mut series_date_select = document.select(&series_date_selector);
         series_date_select.next(); //Skip creator field to be picked up by different selector
+
+        let test = document.html();
+        println!("{test}");
 
         let title: String = document
             .select(&title_selector)

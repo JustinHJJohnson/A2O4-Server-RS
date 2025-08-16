@@ -7,7 +7,7 @@ use std::ffi::OsStr;
 use crate::ao3::common::{parse_url, DownloadFormat, PageType};
 use crate::ao3::series::Series;
 use crate::ao3::user;
-use crate::ao3::work::{test_work, Work};
+use crate::ao3::work::Work;
 use crate::config::read_config;
 use crate::sftp::{upload_series, upload_work};
 
@@ -20,9 +20,7 @@ use serde_json::to_string_pretty;
 use std::io::prelude::*;
 use std::fs::{File, read_dir};
 use std::path::Path;
-use rocket::futures::future::err;
 use url::Url;
-use log::error;
 
 #[macro_use]
 extern crate rocket;
@@ -103,7 +101,7 @@ async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) 
 }
 
 #[derive(Deserialize)]
-struct UploadRequest<'r> {
+struct UploadWorkRequest<'r> {
     work: &'r str,
     fandom: &'r str,
     series: Option<&'r str>,
@@ -111,8 +109,8 @@ struct UploadRequest<'r> {
     device: Option<&'r str>,
 }
 
-#[post("/upload", format = "json", data = "<request>")]
-async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {
+#[post("/upload/work", format = "json", data = "<request>")]
+async fn upload_work_api(request: Json<UploadWorkRequest<'_>>) -> (Status, String) {
     let config = match read_config().await {
         Ok(config) => config,
         Err(error) => {
@@ -122,7 +120,12 @@ async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {
     
     let device = config.get_device_by_name_or_first(request.device);
     
-    let work = test_work(request.work.to_owned(), request.fandom.to_owned(), request.series, request.part_in_series);
+    let work = Work::test_work(
+        request.work,
+        request.fandom,
+        request.series,
+        Some(request.part_in_series.unwrap().parse::<u8>().unwrap()),
+    );
     
     if request.series.is_some() {
         let upload_result = upload_work(&work, device, &config, DownloadFormat::EPUB, None, Some(&"1".to_owned())).await;
@@ -140,6 +143,41 @@ async fn upload(request: Json<UploadRequest<'_>>) -> (Status, String) {
            
 
     (Status::Ok, format!("Successfully uploaded {} to {}", request.work, request.device.unwrap()))
+}
+
+#[derive(Deserialize)]
+struct UploadSeriesRequest<'r> {
+    series: &'r str,
+    fandom: &'r str,
+    device: Option<&'r str>,
+}
+
+#[post("/upload/series", format = "json", data = "<request>")]
+async fn upload_series_api(request: Json<UploadSeriesRequest<'_>>) -> (Status, String) {
+    let config = match read_config().await {
+        Ok(config) => config,
+        Err(error) => {
+            return (Status::InternalServerError, format!("Config Error: {error}"))
+        }
+    };
+
+    let device = config.get_device_by_name_or_first(request.device);
+
+    let series = match Series::test_series(request.series, request.fandom, &config) {
+        Ok(series) => series,
+        Err(error) => {
+            return (Status::InternalServerError, format!("Series Upload Error: {error}"))
+        }
+    };
+
+    let upload_result = upload_series(&series, device, &config, DownloadFormat::EPUB).await;
+    let Ok(()) = upload_result else {
+        let error = upload_result.err().unwrap();
+        println!("{}", error.root_cause());
+        return (Status::BadRequest, error.to_string());
+    };
+
+    (Status::Ok, format!("Successfully uploaded {} to {}", request.series, request.device.unwrap()))
 }
 
 #[get("/healthcheck")]
@@ -169,7 +207,8 @@ async fn rocket() -> _ {
                 )
                 .manage(user)
                 .mount("/", routes![download])
-                .mount("/", routes![upload])
+                .mount("/", routes![upload_series_api])
+                .mount("/", routes![upload_work_api])
                 .mount("/", routes![healthcheck])
         },
         Err(error) => {
