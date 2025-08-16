@@ -180,6 +180,26 @@ async fn upload_series_api(request: Json<UploadSeriesRequest<'_>>) -> (Status, S
     (Status::Ok, format!("Successfully uploaded {} to {}", request.series, request.device.unwrap()))
 }
 
+#[get("/meta")]
+fn meta() -> (Status, String) {
+    let files = read_dir("downloads").unwrap();
+    for file in files {
+        let file = file.unwrap();
+        let path = file.path();
+        if !path.is_dir() && path.extension() == Some(OsStr::new("epub")) {
+            let mut doc = EpubDoc::new(&path).unwrap();
+            //doc.go_next();
+            //doc.go_next();
+            let test = doc.get_current().unwrap();
+            //let mut metadata_file = File::create(path.with_extension("json")).unwrap();
+            //metadata_file.write_all(&to_string_pretty(&doc.metadata).unwrap().into_bytes()).unwrap();
+            println!("{}", String::from_utf8(test.0).unwrap());
+        }
+    }
+
+    (Status::Ok, "Ok".to_string())
+}
+
 #[get("/healthcheck")]
 fn healthcheck() -> (Status, String) {
     (Status::Ok, "A2O4 is running".to_string())
@@ -209,6 +229,7 @@ async fn rocket() -> _ {
                 .mount("/", routes![download])
                 .mount("/", routes![upload_series_api])
                 .mount("/", routes![upload_work_api])
+                .mount("/", routes![meta])
                 .mount("/", routes![healthcheck])
         },
         Err(error) => {
