@@ -12,10 +12,11 @@ use crate::config::read_config;
 use crate::sftp::{upload_series, upload_work};
 
 use epub::doc::EpubDoc;
-use rocket::http::Status;
+use rocket::http::{Header, Status};
 use rocket::response::content;
 use rocket::serde::json::Json;
-use rocket::State;
+use rocket::{State, Request, Response};
+use rocket::fairing::{Fairing, Info, Kind};
 use serde::Deserialize;
 use serde_json::to_string_pretty;
 use std::io::prelude::*;
@@ -26,6 +27,24 @@ use url::Url;
 #[macro_use]
 extern crate rocket;
 
+pub struct CORS;
+
+#[rocket::async_trait]
+impl Fairing for CORS {
+    fn info(&self) -> Info {
+        Info {
+            name: "Add CORS headers to responses",
+            kind: Kind::Response
+        }
+    }
+
+    async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
+        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        response.set_header(Header::new("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS"));
+        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+    }
+}
 
 #[derive(Deserialize)]
 struct DownloadRequest<'r> {
@@ -232,6 +251,7 @@ async fn rocket() -> _ {
                         .merge(("address", "0.0.0.0"))
                 )
                 .manage(user)
+                .attach(CORS)
                 .mount("/", routes![index])
                 .mount("/", routes![download])
                 .mount("/", routes![upload_series_api])
