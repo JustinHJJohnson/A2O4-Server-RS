@@ -13,6 +13,7 @@ use crate::sftp::{upload_series, upload_work};
 
 use epub::doc::EpubDoc;
 use rocket::http::Status;
+use rocket::response::content;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::Deserialize;
@@ -31,6 +32,11 @@ struct DownloadRequest<'r> {
     url: &'r str,
     device: Option<&'r str>,
     fandom_override: Option<&'r str>,
+}
+
+#[get("/")]
+fn index() -> content::RawHtml<&'static str> {
+    content::RawHtml("Hello 👋")
 }
 
 #[post("/download", format = "json", data = "<request>")]
@@ -226,6 +232,7 @@ async fn rocket() -> _ {
                         .merge(("address", "0.0.0.0"))
                 )
                 .manage(user)
+                .mount("/", routes![index])
                 .mount("/", routes![download])
                 .mount("/", routes![upload_series_api])
                 .mount("/", routes![upload_work_api])
@@ -239,7 +246,7 @@ async fn rocket() -> _ {
     }
 }
 
-fn write_epub_metadata_to_json() {
+/*fn write_epub_metadata_to_json() {
     let files = read_dir("downloads").unwrap();
     for file in files {
         let file = file.unwrap();
@@ -251,4 +258,4 @@ fn write_epub_metadata_to_json() {
             metadata_file.write_all(&to_string_pretty(&doc.metadata).unwrap().into_bytes()).unwrap();
         }
     }
-}
+}*/
