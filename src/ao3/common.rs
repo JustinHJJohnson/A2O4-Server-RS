@@ -203,7 +203,7 @@ pub fn sanitise_string(string: &str) -> String {
     string
         .trim()
         .chars()
-        .filter(|c| !['!', '?', ':'].contains(c))
+        .filter(|c| !['!', '?', ':', '"'].contains(c))
         .collect::<String>()
 }
 
