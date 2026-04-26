@@ -9,6 +9,7 @@ use std::path::Path;
 use std::str::FromStr;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use crate::ao3::series::Series;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SeriesLink {
@@ -51,36 +52,36 @@ impl std::fmt::Display for Work {
 }
 
 impl Work {
-    pub fn test_work(title: &str, fandom: &str, series: Option<&str>, part_in_series: Option<u8>) -> Self {
+    pub fn test_work(title: String, fandom: String, series: Option<String>, part_in_series: Option<u8>) -> Self {
         match series {
             None => {
                 Self {
                     id: "1".to_owned(),
-                    title: title.to_string(),
+                    title,
                     author: String::new(),
                     download_links: HashMap::default(),
                     fandoms: vec![],
-                    filtered_fandom: fandom.to_string(),
+                    filtered_fandom: fandom,
                     relationships: vec![],
                     characters: vec![],
                     additional_tags: vec![],
                     series: HashMap::default(),
                 }
             }
-            Some(_) => {
+            Some(unwrapped_series) => {
                 Self {
                     id: "1".to_owned(),
-                    title: title.to_string(),
+                    title,
                     author: String::new(),
                     download_links: HashMap::default(),
                     fandoms: vec![],
-                    filtered_fandom: fandom.to_string(),
+                    filtered_fandom: fandom,
                     relationships: vec![],
                     characters: vec![],
                     additional_tags: vec![],
                     series: HashMap::from([("1".to_owned(), SeriesLink {
                         series_id: "1".to_string(),
-                        series_name: series.unwrap().to_owned(),
+                        series_name: unwrapped_series,
                         part_in_series: part_in_series.unwrap(),
                     })]),
                 }
@@ -92,6 +93,7 @@ impl Work {
         self.series.get(series_id)
     }
 
+    //TODO maybe pass in whole series and get part in series from that
     pub fn get_filename(&self, format: DownloadFormat, series_id: Option<&String>) -> String {
         let non_series_filename = format!("{}.{}", self.title, format.to_string().to_lowercase());
         
@@ -110,7 +112,7 @@ impl Work {
         }
     }
 
-    pub async fn parse_work(id: &str, user: &User, config: &Config, fandom_override: Option<&str>) -> Result<Work> {
+    pub async fn parse_work(id: &str, user: &User, config: &Config, fandom_override: Option<String>) -> Result<Work> {
         println!("loading work {id}");
         let document = get_page(id, None, user).await?;
         println!("Got AO3 response");
@@ -229,7 +231,7 @@ impl Work {
             download_links,
             fandoms: fandoms.clone(),
             filtered_fandom: match fandom_override {
-                Some(fandom) => fandom.to_owned(),
+                Some(fandom) => fandom,
                 None => filter_fandoms(&fandoms, config)
             },
             relationships,
@@ -355,7 +357,7 @@ impl Work {
         &self,
         download_folder: &Path,
         format: DownloadFormat,
-        series_id: Option<&String>,
+        series: Option<&Series>,
         user: &User,
     ) -> Result<()> {
         let download_link = self.download_links[&format].clone();
@@ -369,7 +371,7 @@ impl Work {
             .bytes()
             .await
             .with_context(|| format!("Error converting work {} to bytes", self.title))?;
-        let download_path = download_folder.join(self.get_filename(format, series_id));
+        let download_path = download_folder.join(self.get_filename(format, series.map(|x| &x.id)));
 
         println!("Downloading to: {}", download_folder.to_str().unwrap());
 

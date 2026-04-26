@@ -18,7 +18,7 @@ pub async fn upload_work(
     config: &Config,
     download_format: DownloadFormat,
     existing_sftp: Option<&Sftp>,
-    series_id: Option<&String>,
+    series: Option<&Series>,
 ) -> Result<()> {
     let using_existing_connection = existing_sftp.is_some();
 
@@ -28,15 +28,10 @@ pub async fn upload_work(
         &create_sftp_connection(device)?
     };
 
-    let filename = work.get_filename(download_format, series_id);
-    let file_path = if let Some(unwrapped_series_id) = series_id {
+    let filename = work.get_filename(download_format, series.map(|x| &x.id));
+    let file_path = if let Some(unwrapped_series) = series {
         Path::new(&config.download_path)
-            .join(
-                &work
-                    .get_series_link(unwrapped_series_id)
-                    .unwrap()
-                    .series_name,
-            )
+            .join(unwrapped_series.title.clone())
             .join(&filename)
     } else {
         Path::new(&config.download_path).join(&filename)
@@ -62,20 +57,18 @@ pub async fn upload_work(
 
     let remote_download_folder = Path::new(&device.download_folder);
     let mut remote_file_path = PathBuf::from(remote_download_folder);
-    remote_file_path.push(work.filtered_fandom.clone());
+    remote_file_path.push(
+        if let Some(unwrapped_series) = series {
+            unwrapped_series.filtered_fandom.clone()
+        } else {
+            work.filtered_fandom.clone()
+        }
+    );
     if work.filtered_fandom == "Original Work" {
         remote_file_path.push(work.author.clone());
     }
-    if let Some(unwrapped_series_id) = series_id {
-        remote_file_path.push(
-            &work
-                .get_series_link(unwrapped_series_id)
-                .with_context(|| format!(
-                    "Failed to get series link for {unwrapped_series_id} on work {}",
-                    work.title
-                ))?
-                .series_name,
-        );
+    if let Some(unwrapped_series) = series {
+        remote_file_path.push(unwrapped_series.title.clone());
     }
     remote_file_path.push(filename);
 
@@ -91,8 +84,8 @@ pub async fn upload_work(
         .with_context(|| format!(
             "Failed to create remote file {} for work {}",
             &remote_file_path.to_str().unwrap(),
-            work.title)
-        )?;
+            work.title
+        ))?;
 
     let chunk_size = 15000;
 
@@ -133,7 +126,7 @@ pub async fn upload_series(
             config,
             download_format,
             Some(&sftp),
-            Some(&series.id),
+            Some(series),
         ).await?;
     }
     Ok(())

@@ -12,7 +12,7 @@ regex = "1.11.1"
 reqwest = { version = "0.12.5", features = ["blocking", "cookies"] }
 reqwest_cookie_store = "0.8.0"
 rocket = { version = "0.5.1", features = ["json"] }
-scraper = "0.22.0"
+scraper = { version = "0.22.0", features = ["atomic"] }
 serde = { version = "1.0.210", features = ["derive"] }
 ssh2 = "0.9.4"
 strum = "0.26.3"

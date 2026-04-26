@@ -54,13 +54,13 @@ impl std::fmt::Display for Series {
 }
 
 impl Series {
-    pub fn test_series(title: &str, fandom: &str, config: &Config) -> Result<Series> {
-        let (works, num_works) = Self::load_series_works_from_local(title, fandom, config)?;
+    pub fn test_series(title: String, fandom: String, config: &Config) -> Result<Series> {
+        let (works, num_works) = Self::load_series_works_from_local(title.clone(), fandom.clone(), config)?;
 
         Ok(
             Series {
                 id: "1".to_owned(),
-                title: sanitise_string(title),
+                title: sanitise_string(&*title),
                 creator: "bob".to_owned(),
                 series_begun: "at some point".to_owned(),
                 series_updated: "sure".to_owned(),
@@ -72,40 +72,38 @@ impl Series {
                 works,
                 authors: HashSet::from(["yes".to_string()]),
                 fandoms: HashSet::from(["yes".to_string()]),
-                filtered_fandom: fandom.to_string(),
+                filtered_fandom: fandom,
             }
         )
     }
 
-    fn load_series_works_from_local(title: &str, fandom: &str, config: &Config) -> Result<(Vec<Work>, u32)> {
-        let series_path = Path::new(&config.download_path).join(title);
+    fn load_series_works_from_local(title: String, fandom: String, config: &Config) -> Result<(Vec<Work>, u32)> {
+        let series_path = Path::new(&config.download_path).join(title.clone());
         let works = read_dir(series_path.clone())?;
         let mut num_works = 0;
 
-        Ok(
-            (
-                works.map(
-                    |work| {
-                        num_works += 1;
-                        let binding = Into::<PathBuf>::into(work.unwrap().file_name());
-                        let (num_in_series, work_title) = binding
-                            .file_stem()
-                            .unwrap()
-                            .to_str()
-                            .unwrap()
-                            .split_once(" - ")
-                            .unwrap();
-                        Work::test_work(
-                            work_title,
-                            fandom,
-                            Some(title),
-                            Some(num_in_series.parse::<u8>().unwrap()),
-                        )
-                    }
-                ).collect(),
-                num_works
-            )
-        )
+        Ok((
+            works.map(
+                |work| {
+                    num_works += 1;
+                    let binding = Into::<PathBuf>::into(work.unwrap().file_name());
+                    let (num_in_series, work_title) = binding
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .split_once(" - ")
+                        .unwrap();
+                    Work::test_work(
+                        work_title.to_string(),
+                        fandom.to_string(),
+                        Some(title.to_string()),
+                        Some(num_in_series.parse::<u8>().unwrap()),
+                    )
+                }
+            ).collect(),
+            num_works
+        ))
     }
 
     pub async fn parse_series(id: &str, user: &User, config: &Config) -> Result<Series> {
@@ -265,7 +263,7 @@ impl Series {
             }
         };
         for work in &self.works {
-            let _ = work.download(&series_path, format, Some(&self.id), user).await;
+            let _ = work.download(&series_path, format, Some(&self), user).await;
             println!();
         };
         Ok(())

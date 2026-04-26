@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde_json::to_string_pretty;
 use std::io::prelude::*;
 use std::fs::{File, read_dir};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use url::Url;
 
 #[macro_use]
@@ -47,10 +47,10 @@ impl Fairing for CORS {
 }
 
 #[derive(Deserialize)]
-struct DownloadRequest<'r> {
-    url: &'r str,
-    device: Option<&'r str>,
-    fandom_override: Option<&'r str>,
+struct DownloadRequest {
+    url: String,
+    device: String,
+    fandom_override: Option<String>,
 }
 
 #[get("/")]
@@ -59,8 +59,8 @@ fn index() -> content::RawHtml<&'static str> {
 }
 
 #[post("/download", format = "json", data = "<request>")]
-async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) -> (Status, String) {
-    let Ok(url) = Url::parse(request.url) else {
+async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (Status, String) {
+    let Ok(url) = Url::parse(&*request.url) else {
         return (Status::BadRequest, String::from("Could not parse provided URL"));
     };
     
@@ -75,13 +75,15 @@ async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) 
             return (Status::InternalServerError, format!("Config Error: {error}"))
         }
     };
-    
-    let device = config.get_device_by_name_or_first(request.device);
+
+    let Some(device) = config.get_device_by_name(request.device.clone()) else {
+        return (Status::BadRequest, format!("Could not find device {}", request.device))
+    };
 
     //TODO should also log any errors
     match url_info.page_type {
         PageType::Work => {
-            let work_result = Work::parse_work(&url_info.id, user, &config, request.fandom_override).await;
+            let work_result = Work::parse_work(&url_info.id, user, &config, request.fandom_override.clone()).await;
             let Ok(work) = work_result else {
                 return (Status::BadRequest, work_result.err().unwrap().to_string());
             };
@@ -125,17 +127,23 @@ async fn download(request: Json<DownloadRequest<'_>>, user: &State<user::User>) 
     (Status::Ok, format!("Successfully downloaded {} with id {}", url_info.page_type, url_info.id))
 }
 
+#[derive(Clone, Deserialize)]
+struct UploadWorkSeries {
+    title: String,
+    fandom: String,
+}
+
 #[derive(Deserialize)]
-struct UploadWorkRequest<'r> {
-    work: &'r str,
-    fandom: &'r str,
-    series: Option<&'r str>,
-    part_in_series: Option<&'r str>,
-    device: Option<&'r str>,
+struct UploadWorkRequest {
+    work: String,
+    fandom: String,
+    series: Option<UploadWorkSeries>,
+    part_in_series: Option<u8>,
+    device: String,
 }
 
 #[post("/upload/work", format = "json", data = "<request>")]
-async fn upload_work_api(request: Json<UploadWorkRequest<'_>>) -> (Status, String) {
+async fn upload_work_api(request: Json<UploadWorkRequest>) -> (Status, String) {
     let config = match read_config().await {
         Ok(config) => config,
         Err(error) => {
@@ -143,17 +151,20 @@ async fn upload_work_api(request: Json<UploadWorkRequest<'_>>) -> (Status, Strin
         }
     };
     
-    let device = config.get_device_by_name_or_first(request.device);
+    let Some(device) = config.get_device_by_name(request.device.clone()) else {
+        return (Status::BadRequest, format!("Could not find device {}", request.device))
+    };
     
     let work = Work::test_work(
-        request.work,
-        request.fandom,
-        request.series,
-        Some(request.part_in_series.unwrap().parse::<u8>().unwrap()),
+        request.work.clone(),
+        request.fandom.clone(),
+        request.series.clone().map(|x| x.title),
+        Some(request.part_in_series.unwrap()),
     );
     
-    if request.series.is_some() {
-        let upload_result = upload_work(&work, device, &config, DownloadFormat::EPUB, None, Some(&"1".to_owned())).await;
+    if let Some(unwrapped_series) = &request.series {
+        let dummy_series = Series::test_series(unwrapped_series.title.clone(), unwrapped_series.fandom.clone(), &config).unwrap();
+        let upload_result = upload_work(&work, device, &config, DownloadFormat::EPUB, None, Some(&dummy_series)).await;
         let Ok(()) = upload_result else {
             return (Status::BadRequest, upload_result.err().unwrap().to_string());
         };
@@ -167,18 +178,18 @@ async fn upload_work_api(request: Json<UploadWorkRequest<'_>>) -> (Status, Strin
     } 
            
 
-    (Status::Ok, format!("Successfully uploaded {} to {}", request.work, request.device.unwrap()))
+    (Status::Ok, format!("Successfully uploaded {} to {}", request.work, request.device))
 }
 
 #[derive(Deserialize)]
-struct UploadSeriesRequest<'r> {
-    series: &'r str,
-    fandom: &'r str,
-    device: Option<&'r str>,
+struct UploadSeriesRequest {
+    series: String,
+    fandom: String,
+    device: String,
 }
 
 #[post("/upload/series", format = "json", data = "<request>")]
-async fn upload_series_api(request: Json<UploadSeriesRequest<'_>>) -> (Status, String) {
+async fn upload_series_api(request: Json<UploadSeriesRequest>) -> (Status, String) {
     let config = match read_config().await {
         Ok(config) => config,
         Err(error) => {
@@ -186,9 +197,11 @@ async fn upload_series_api(request: Json<UploadSeriesRequest<'_>>) -> (Status, S
         }
     };
 
-    let device = config.get_device_by_name_or_first(request.device);
+    let Some(device) = config.get_device_by_name(request.device.clone()) else {
+        return (Status::BadRequest, format!("Could not find device {}", request.device))
+    };
 
-    let series = match Series::test_series(request.series, request.fandom, &config) {
+    let series = match Series::test_series(request.series.clone(), request.fandom.clone(), &config) {
         Ok(series) => series,
         Err(error) => {
             return (Status::InternalServerError, format!("Series Upload Error: {error}"))
@@ -202,12 +215,20 @@ async fn upload_series_api(request: Json<UploadSeriesRequest<'_>>) -> (Status, S
         return (Status::BadRequest, error.to_string());
     };
 
-    (Status::Ok, format!("Successfully uploaded {} to {}", request.series, request.device.unwrap()))
+    (Status::Ok, format!("Successfully uploaded {} to {}", request.series, request.device))
 }
 
 #[get("/meta")]
 fn meta() -> (Status, String) {
-    let files = read_dir("downloads").unwrap();
+    let mut doc = EpubDoc::new(PathBuf::from("downloads/Horny on Main Nikke/1 - I'll be by your side..epub")).unwrap();
+    //doc.go_next();
+    let test = doc.get_current().unwrap();
+    let a = test.0;
+    println!("{}", String::from_utf8(a).unwrap());
+    //println!("{}", doc.mdata("creator").unwrap().value);
+    //println!("{:?}", doc.metadata);
+
+    /*let files = read_dir("downloads").unwrap();
     for file in files {
         let file = file.unwrap();
         let path = file.path();
@@ -220,7 +241,7 @@ fn meta() -> (Status, String) {
             //metadata_file.write_all(&to_string_pretty(&doc.metadata).unwrap().into_bytes()).unwrap();
             println!("{}", String::from_utf8(test.0).unwrap());
         }
-    }
+    }*/
 
     (Status::Ok, "Ok".to_string())
 }

@@ -56,7 +56,7 @@ pub struct UrlInfo {
     pub id: String
 }
 
-//TODO check for SSL error page, proxy error page, timeout page
+//TODO check for proxy error page, timeout page
 pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
     let url = if let Some(i) = page {
         format!("https://archiveofourown.org/series/{id}?page={i}")
@@ -71,9 +71,13 @@ pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
         eprint!("This work/series is restricted and requires an AO3 account");
         return Err(Error::msg("Restricted Error"));
     }
-    
-    if response.status() == 525 {
+
+    if response.status() == StatusCode::NOT_FOUND {
+        return Err(Error::msg(format!("URL {url} is not a valid page")));
+    } else if response.status() == 525 {
         return Err(Error::msg("Cloudflare SSL Error"));
+    } else if !response.status().is_success() {
+        return Err(Error::msg(format!("Unknown HTTP error {}", response.status())));
     }
     
     println!("response code: {}", response.status());
@@ -101,29 +105,20 @@ pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
 }
 
 pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
-    let url = format!("https://archiveofourown.org/series/{id}");
-    let response = request_with_user(url.clone(), user).await
-        .with_context(|| format!("Failed to fetch series page {url}"))?;
-    
-    if response.status() == StatusCode::NOT_FOUND {
-        let message = format!("URL {url} is not a valid series page");
-        eprintln!("{message}");
-        return Err(Error::msg(message));
-    }
+    let response = get_page(id, Some(1), user).await?;
 
-    let response_text = response.text().await
-        .with_context(|| format!("Failed to get response text for {url}"))?;
+    let response_text = response.html();
     let num_pages = if response_text.contains("Pages Navigation") {
         let response_substring = response_text
             .split("Pages Navigation")
             .nth(1)
-            .with_context(|| format!("Failed to page selector for {url}"))?
+            .with_context(|| format!("Failed to page selector for series {id}"))?
             .split('\n')
             .next()
-            .with_context(|| format!("Failed to page selector for {url}"))?;
+            .with_context(|| format!("Failed to page selector for series {id}"))?;
 
         u8::try_from(Regex::new(r">\d+<")?.captures_iter(response_substring).count())
-            .with_context(|| format!("Failed to parse num of pages for {url}"))?
+            .with_context(|| format!("Failed to parse num of pages for series {id}"))?
     } else {
         1
     };
@@ -131,10 +126,9 @@ pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
     let mut raw_html: Vec<String> = vec![response_text];
 
     for page in 2..=num_pages {
-        let url = format!("https://archiveofourown.org/series/{id}?page={page}");
-        let response = request_with_user(url.clone(), user).await
-            .with_context(|| format!("Failed to fetch series page {url}"))?;
-        raw_html.push(response.text().await?);
+        let response = get_page(id, Some(page), user).await
+            .with_context(|| format!("Failed to fetch series page {page}"))?;
+        raw_html.push(response.html());
     }
 
     Ok(raw_html.iter().map(|a| Html::parse_document(a)).collect())

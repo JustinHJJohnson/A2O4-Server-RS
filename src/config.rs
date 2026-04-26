@@ -33,11 +33,11 @@ impl Config {
         }
     }
     
-    pub fn get_device_by_name(&self, name: &str) -> Option<&Device> {
+    pub fn get_device_by_name(&self, name: String) -> Option<&Device> {
         self.devices.iter().find(|d| d.name == name)
     }
     
-    pub fn get_device_by_name_or_first(&self, name: Option<&str>) -> &Device {
+    pub fn get_device_by_name_or_first(&self, name: Option<String>) -> &Device {
         if let Some(device_name) = name {
             match self.get_device_by_name(device_name) {
                 Some(device) => device,
