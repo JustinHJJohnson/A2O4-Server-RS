@@ -363,11 +363,19 @@ impl Work {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {download_link}");
 
-        let work = user.client
+        let work_response = user.client
             .get(&download_link)
             .send()
             .await
-            .with_context(|| format!("Error downloading work {} from {download_link}", self.title))?
+            .with_context(|| format!("Error downloading work {} from {download_link}", self.title))?;
+
+        if work_response.status() == 525 {
+            return Err(anyhow::anyhow!("SSL error trying to download work {}: {work_response:?}", self.title));
+        } else if !work_response.status().is_success() {
+            return Err(anyhow::anyhow!("Unknown error trying to download work {}: {work_response:?}", self.title));
+        }
+
+        let work = work_response
             .bytes()
             .await
             .with_context(|| format!("Error converting work {} to bytes", self.title))?;
