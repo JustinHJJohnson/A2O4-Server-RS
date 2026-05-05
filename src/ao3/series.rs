@@ -55,36 +55,39 @@ impl std::fmt::Display for Series {
 
 impl Series {
     pub fn test_series(title: String, fandom: String, config: &Config) -> Result<Series> {
-        let (works, num_works) = Self::load_series_works_from_local(title.clone(), fandom.clone(), config)?;
+        let (works, num_works) =
+            Self::load_series_works_from_local(title.clone(), fandom.clone(), config)?;
 
-        Ok(
-            Series {
-                id: "1".to_owned(),
-                title: sanitise_string(&*title),
-                creator: "bob".to_owned(),
-                series_begun: "at some point".to_owned(),
-                series_updated: "sure".to_owned(),
-                description: "yes".to_owned(),
-                num_words: 1,
-                num_works,
-                is_completed: true,
-                num_bookmarks: 0,
-                works,
-                authors: HashSet::from(["yes".to_string()]),
-                fandoms: HashSet::from(["yes".to_string()]),
-                filtered_fandom: fandom,
-            }
-        )
+        Ok(Series {
+            id: "1".to_owned(),
+            title: sanitise_string(&*title),
+            creator: "bob".to_owned(),
+            series_begun: "at some point".to_owned(),
+            series_updated: "sure".to_owned(),
+            description: "yes".to_owned(),
+            num_words: 1,
+            num_works,
+            is_completed: true,
+            num_bookmarks: 0,
+            works,
+            authors: HashSet::from(["yes".to_string()]),
+            fandoms: HashSet::from(["yes".to_string()]),
+            filtered_fandom: fandom,
+        })
     }
 
-    fn load_series_works_from_local(title: String, fandom: String, config: &Config) -> Result<(Vec<Work>, u32)> {
+    fn load_series_works_from_local(
+        title: String,
+        fandom: String,
+        config: &Config,
+    ) -> Result<(Vec<Work>, u32)> {
         let series_path = Path::new(&config.download_path).join(title.clone());
         let works = read_dir(series_path.clone())?;
         let mut num_works = 0;
 
         Ok((
-            works.map(
-                |work| {
+            works
+                .map(|work| {
                     num_works += 1;
                     let binding = Into::<PathBuf>::into(work.unwrap().file_name());
                     let (num_in_series, work_title) = binding
@@ -100,9 +103,9 @@ impl Series {
                         Some(title.to_string()),
                         Some(num_in_series.parse::<u8>().unwrap()),
                     )
-                }
-            ).collect(),
-            num_works
+                })
+                .collect(),
+            num_works,
         ))
     }
 
@@ -148,12 +151,7 @@ impl Series {
         let creator: String = document
             .select(&creator_selector)
             .next()
-            .unwrap_or(
-                document
-                    .select(&anonymous_creator_selector)
-                    .next()
-                    .unwrap()
-            )
+            .unwrap_or(document.select(&anonymous_creator_selector).next().unwrap())
             .text()
             .collect();
         let series_begun: String = series_date_select.next().unwrap().text().collect();
@@ -230,7 +228,7 @@ impl Series {
                 works.push(parsed_work);
             }
         }
-        
+
         println!("Finished parsing series");
 
         Ok(Series {
@@ -251,21 +249,24 @@ impl Series {
         })
     }
 
-    pub async fn download(&self, path: &Path, format: DownloadFormat, user: &User) -> std::io::Result<()> {
+    pub async fn download(
+        &self,
+        path: &Path,
+        format: DownloadFormat,
+        user: &User,
+    ) -> std::io::Result<()> {
         let series_path = path.join(&self.title);
         match create_dir(&series_path).await {
             Ok(_) => {}
-            Err(error) => {
-                match error.kind() {
-                    ErrorKind::AlreadyExists => {}
-                    _ => return Err(error),
-                }
-            }
+            Err(error) => match error.kind() {
+                ErrorKind::AlreadyExists => {}
+                _ => return Err(error),
+            },
         };
         for work in &self.works {
             let _ = work.download(&series_path, format, Some(&self), user).await;
             println!();
-        };
+        }
         Ok(())
     }
 }

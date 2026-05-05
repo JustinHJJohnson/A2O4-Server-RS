@@ -2,6 +2,7 @@ use crate::ao3::common::{filter_fandoms, get_page, sanitise_string, DownloadForm
 use crate::ao3::user::User;
 use crate::config::Config;
 
+use crate::ao3::series::Series;
 use anyhow::{Context, Result};
 use scraper::{ElementRef, Selector};
 use std::collections::HashMap;
@@ -9,7 +10,6 @@ use std::path::Path;
 use std::str::FromStr;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use crate::ao3::series::Series;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SeriesLink {
@@ -52,43 +52,47 @@ impl std::fmt::Display for Work {
 }
 
 impl Work {
-    pub fn test_work(title: String, fandom: String, series: Option<String>, part_in_series: Option<u8>) -> Self {
+    pub fn test_work(
+        title: String,
+        fandom: String,
+        series: Option<String>,
+        part_in_series: Option<u8>,
+    ) -> Self {
         match series {
-            None => {
-                Self {
-                    id: "1".to_owned(),
-                    title,
-                    author: String::new(),
-                    download_links: HashMap::default(),
-                    fandoms: vec![],
-                    filtered_fandom: fandom,
-                    relationships: vec![],
-                    characters: vec![],
-                    additional_tags: vec![],
-                    series: HashMap::default(),
-                }
-            }
-            Some(unwrapped_series) => {
-                Self {
-                    id: "1".to_owned(),
-                    title,
-                    author: String::new(),
-                    download_links: HashMap::default(),
-                    fandoms: vec![],
-                    filtered_fandom: fandom,
-                    relationships: vec![],
-                    characters: vec![],
-                    additional_tags: vec![],
-                    series: HashMap::from([("1".to_owned(), SeriesLink {
+            None => Self {
+                id: "1".to_owned(),
+                title,
+                author: String::new(),
+                download_links: HashMap::default(),
+                fandoms: vec![],
+                filtered_fandom: fandom,
+                relationships: vec![],
+                characters: vec![],
+                additional_tags: vec![],
+                series: HashMap::default(),
+            },
+            Some(unwrapped_series) => Self {
+                id: "1".to_owned(),
+                title,
+                author: String::new(),
+                download_links: HashMap::default(),
+                fandoms: vec![],
+                filtered_fandom: fandom,
+                relationships: vec![],
+                characters: vec![],
+                additional_tags: vec![],
+                series: HashMap::from([(
+                    "1".to_owned(),
+                    SeriesLink {
                         series_id: "1".to_string(),
                         series_name: unwrapped_series,
                         part_in_series: part_in_series.unwrap(),
-                    })]),
-                }
-            }
+                    },
+                )]),
+            },
         }
     }
-    
+
     pub fn get_series_link(&self, series_id: &String) -> Option<&SeriesLink> {
         self.series.get(series_id)
     }
@@ -96,7 +100,7 @@ impl Work {
     //TODO maybe pass in whole series and get part in series from that
     pub fn get_filename(&self, format: DownloadFormat, series_id: Option<&String>) -> String {
         let non_series_filename = format!("{}.{}", self.title, format.to_string().to_lowercase());
-        
+
         if let Some(series_id) = series_id {
             match self.get_series_link(series_id) {
                 Some(series_link) => format!(
@@ -105,21 +109,27 @@ impl Work {
                     self.title,
                     format.to_string().to_lowercase()
                 ),
-                None => non_series_filename
+                None => non_series_filename,
             }
         } else {
             non_series_filename
         }
     }
 
-    pub async fn parse_work(id: &str, user: &User, config: &Config, fandom_override: Option<String>) -> Result<Work> {
+    pub async fn parse_work(
+        id: &str,
+        user: &User,
+        config: &Config,
+        fandom_override: Option<String>,
+    ) -> Result<Work> {
         println!("loading work {id}");
         let document = get_page(id, None, user).await?;
         println!("Got AO3 response");
 
         let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
         let author_selector = Selector::parse("h3.byline.heading>a").expect("Error parsing author");
-        let anonymous_author_selector = Selector::parse("h3.byline.heading").expect("Error parsing author");
+        let anonymous_author_selector =
+            Selector::parse("h3.byline.heading").expect("Error parsing author");
         let downloads_selector =
             Selector::parse("li.download>ul>li>a").expect("Error parsing download links");
         let fandoms_selector =
@@ -132,7 +142,7 @@ impl Work {
             Selector::parse("dd.freeform.tags>ul>li>a").expect("Error parsing additional tags");
         let part_in_series_selector = Selector::parse("dd.series>span.series>span.position")
             .expect("Error parsing part in series");
-        
+
         let test = document.html();
         println!("{test}");
 
@@ -140,18 +150,13 @@ impl Work {
         let title: String = document
             .select(&title_selector)
             .next()
-                .with_context(|| format!("Could not find title for work {id}"))?
+            .with_context(|| format!("Could not find title for work {id}"))?
             .text()
             .collect();
         let author: String = document
             .select(&author_selector)
             .next()
-            .unwrap_or(
-                document
-                    .select(&anonymous_author_selector)
-                    .next()
-                    .unwrap()
-            )
+            .unwrap_or(document.select(&anonymous_author_selector).next().unwrap())
             .text()
             .collect();
         let downloads_popup = document.select(&downloads_selector);
@@ -206,7 +211,7 @@ impl Work {
                                 .split_whitespace()
                                 .filter(|chunk| *chunk != "series")
                                 .collect::<Vec<&str>>()
-                                .join(" ")
+                                .join(" "),
                         ),
                         series_id,
                         part_in_series: series
@@ -232,7 +237,7 @@ impl Work {
             fandoms: fandoms.clone(),
             filtered_fandom: match fandom_override {
                 Some(fandom) => fandom,
-                None => filter_fandoms(&fandoms, config)
+                None => filter_fandoms(&fandoms, config),
             },
             relationships,
             characters,
@@ -363,16 +368,25 @@ impl Work {
         let download_link = self.download_links[&format].clone();
         println!("Download link: {download_link}");
 
-        let work_response = user.client
+        let work_response = user
+            .client
             .get(&download_link)
             .send()
             .await
-            .with_context(|| format!("Error downloading work {} from {download_link}", self.title))?;
+            .with_context(|| {
+                format!("Error downloading work {} from {download_link}", self.title)
+            })?;
 
         if work_response.status() == 525 {
-            return Err(anyhow::anyhow!("SSL error trying to download work {}: {work_response:?}", self.title));
+            return Err(anyhow::anyhow!(
+                "SSL error trying to download work {}: {work_response:?}",
+                self.title
+            ));
         } else if !work_response.status().is_success() {
-            return Err(anyhow::anyhow!("Unknown error trying to download work {}: {work_response:?}", self.title));
+            return Err(anyhow::anyhow!(
+                "Unknown error trying to download work {}: {work_response:?}",
+                self.title
+            ));
         }
 
         let work = work_response
@@ -383,17 +397,20 @@ impl Work {
 
         println!("Downloading to: {}", download_folder.to_str().unwrap());
 
-        let mut work_file = File::create(&download_path).await
-            .with_context(|| format!(
-                "Error creating file for work {} at {}", self.title,
+        let mut work_file = File::create(&download_path).await.with_context(|| {
+            format!(
+                "Error creating file for work {} at {}",
+                self.title,
                 download_path.display()
-            ))?;
-        work_file.write_all(&work).await
-            .with_context(|| format!(
+            )
+        })?;
+        work_file.write_all(&work).await.with_context(|| {
+            format!(
                 "Error writing file for work {} at {}",
                 self.title,
                 download_path.display()
-            ))?;
+            )
+        })?;
         Ok(())
     }
 }

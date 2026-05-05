@@ -1,18 +1,18 @@
-use std::path::Path;
-use std::sync::Arc;
+use crate::config::Config;
 use directories::ProjectDirs;
 use regex::Regex;
 use reqwest::Client;
 use reqwest_cookie_store::CookieStoreMutex;
-use crate::config::Config;
+use std::path::Path;
+use std::sync::Arc;
 
 pub struct User {
     pub client: Client,
-    cookie_store: Arc<CookieStoreMutex>
+    cookie_store: Arc<CookieStoreMutex>,
 }
 
 impl User {
-    pub async fn new(username: &str, password: &str) -> Result<Self,  String> {
+    pub async fn new(username: &str, password: &str) -> Result<Self, String> {
         let Ok(cookie_store) = Self::load_cookies().await else {
             return Err("Error loading cookies from disk".to_string());
         };
@@ -22,19 +22,23 @@ impl User {
             println!("Loaded session from file");
             return Ok(Self {
                 client: Self::build_client(cookie_store.clone()),
-                cookie_store
-            })
+                cookie_store,
+            });
         }
 
         //let (client, auth_token) = Self::auth_user(
         let client = Self::auth_user(
             username.to_string(),
             password.to_string(),
-            cookie_store.clone()
-        ).await;
-        
-        let user = Self { client, cookie_store };
-        
+            cookie_store.clone(),
+        )
+        .await;
+
+        let user = Self {
+            client,
+            cookie_store,
+        };
+
         Self::write_cookies(&user).expect("Failed to write cookies");
 
         Ok(user)
@@ -43,7 +47,7 @@ impl User {
     async fn auth_user(
         username: String,
         password: String,
-        cookie_store: Arc<CookieStoreMutex>
+        cookie_store: Arc<CookieStoreMutex>,
     ) -> Client {
         println!("logging in");
         let client = Self::build_client(cookie_store);
@@ -56,12 +60,13 @@ impl User {
             .text()
             .await
             .unwrap();
-        let regex = Regex::new(r#"(id="new_user").+?("authenticity_token").+?"(?<token>.+?)""#).unwrap();
+        let regex =
+            Regex::new(r#"(id="new_user").+?("authenticity_token").+?"(?<token>.+?)""#).unwrap();
         let auth_token: String = regex.captures(&html_content).unwrap()["token"].to_owned();
         let form_data = [
             ("user[login]", username),
             ("user[password]", password),
-            ("authenticity_token", auth_token)
+            ("authenticity_token", auth_token),
         ];
         let login_response = client
             .post("https://archiveofourown.org/users/login")
@@ -75,11 +80,13 @@ impl User {
         client
     }
 
-    async fn load_cookies() -> Result<Arc<CookieStoreMutex>,  String> {
+    async fn load_cookies() -> Result<Arc<CookieStoreMutex>, String> {
         if let Some(proj_dirs) = ProjectDirs::from("", "", env!("CARGO_PKG_NAME")) {
             let config_dir = proj_dirs.config_dir();
-            let  cookie_store = {
-                if let Ok(file) = std::fs::File::open(Path::new(&config_dir.join("cookies.json"))).map(std::io::BufReader::new) {
+            let cookie_store = {
+                if let Ok(file) = std::fs::File::open(Path::new(&config_dir.join("cookies.json")))
+                    .map(std::io::BufReader::new)
+                {
                     reqwest_cookie_store::CookieStore::load_json(file).unwrap()
                 } else {
                     reqwest_cookie_store::CookieStore::new(None)
@@ -107,7 +114,7 @@ impl User {
             Err("Failed to open config directory".into())
         }
     }
-    
+
     fn build_client(cookie_store: Arc<CookieStoreMutex>) -> Client {
         Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
@@ -121,7 +128,7 @@ pub async fn get_user(config: Config) -> Result<User, String> {
     if let (Some(username), Some(password)) = (&config.ao3_username, &config.ao3_password) {
         match User::new(username, password).await {
             Ok(user) => Ok(user),
-            Err(error) => Err(format!("User Error {}", error))
+            Err(error) => Err(format!("User Error {}", error)),
         }
     } else {
         Err("Username or Password not provided in config file".to_string())

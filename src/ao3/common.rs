@@ -2,28 +2,18 @@ use crate::{ao3::user::User, config::Config};
 
 use anyhow::{Context, Error, Result};
 use enum_iterator::Sequence;
+use regex::Regex;
 use reqwest;
+use reqwest::{Response, StatusCode};
 use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::str::FromStr;
-use regex::Regex;
-use reqwest::{Response, StatusCode};
-use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use url::Url;
 
 #[derive(
-    Debug,
-    EnumString,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    Sequence,
-    Clone,
-    Copy,
-    Serialize,
-    Deserialize
+    Debug, EnumString, PartialEq, Eq, Hash, Display, Sequence, Clone, Copy, Serialize, Deserialize,
 )]
 pub enum DownloadFormat {
     AZW3,
@@ -38,14 +28,14 @@ pub enum PageType {
     #[strum(serialize = "works")]
     Work,
     #[strum(serialize = "series")]
-    Series
+    Series,
 }
 
 impl std::fmt::Display for PageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PageType::Work => write!(f, "work"),
-            _ => write!(f, "series")
+            _ => write!(f, "series"),
         }
     }
 }
@@ -53,7 +43,7 @@ impl std::fmt::Display for PageType {
 #[derive(PartialEq, Debug)]
 pub struct UrlInfo {
     pub page_type: PageType,
-    pub id: String
+    pub id: String,
 }
 
 //TODO check for proxy error page, timeout page
@@ -64,8 +54,9 @@ pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
         format!("https://archiveofourown.org/works/{id}")
     };
 
-    let response = request_with_user(url.clone(), user).await.
-        with_context(|| format!("Failed to fetch page {url}"))?;
+    let response = request_with_user(url.clone(), user)
+        .await
+        .with_context(|| format!("Failed to fetch page {url}"))?;
 
     if response.url().as_str() == "https://archiveofourown.org/users/login?restricted=true" {
         eprint!("This work/series is restricted and requires an AO3 account");
@@ -77,9 +68,12 @@ pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
     } else if response.status() == 525 {
         return Err(Error::msg("Cloudflare SSL Error"));
     } else if !response.status().is_success() {
-        return Err(Error::msg(format!("Unknown HTTP error {}", response.status())));
+        return Err(Error::msg(format!(
+            "Unknown HTTP error {}",
+            response.status()
+        )));
     }
-    
+
     println!("response code: {}", response.status());
 
     let html_content = Html::parse_document(&response.text().await?);
@@ -93,14 +87,16 @@ pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
             } else {
                 String::new()
             }
-        },
-        _ => String::new()
+        }
+        _ => String::new(),
     };
-    
+
     if error_404.is_empty() {
         Ok(html_content)
     } else {
-        Err(Error::msg(format!("Got error {error_404} while fetching {url}")))
+        Err(Error::msg(format!(
+            "Got error {error_404} while fetching {url}"
+        )))
     }
 }
 
@@ -117,16 +113,21 @@ pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
             .next()
             .with_context(|| format!("Failed to page selector for series {id}"))?;
 
-        u8::try_from(Regex::new(r">\d+<")?.captures_iter(response_substring).count())
-            .with_context(|| format!("Failed to parse num of pages for series {id}"))?
+        u8::try_from(
+            Regex::new(r">\d+<")?
+                .captures_iter(response_substring)
+                .count(),
+        )
+        .with_context(|| format!("Failed to parse num of pages for series {id}"))?
     } else {
         1
     };
-    
+
     let mut raw_html: Vec<String> = vec![response_text];
 
     for page in 2..=num_pages {
-        let response = get_page(id, Some(page), user).await
+        let response = get_page(id, Some(page), user)
+            .await
             .with_context(|| format!("Failed to fetch series page {page}"))?;
         raw_html.push(response.html());
     }
@@ -136,7 +137,7 @@ pub async fn get_series_pages(id: &str, user: &User) -> Result<Vec<Html>> {
 
 pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
     let mut mapped_fandoms: HashSet<String> = HashSet::from_iter(fandoms.to_owned());
-    
+
     for fandom in fandoms {
         if config.fandom_map.contains_key(fandom) {
             mapped_fandoms.remove(fandom);
@@ -170,22 +171,25 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
 }
 
 //TODO setup rate limit of 12 per minute
-async fn request_with_user(url: String, user: &User) -> std::result::Result<Response, reqwest::Error> {
+async fn request_with_user(
+    url: String,
+    user: &User,
+) -> std::result::Result<Response, reqwest::Error> {
     user.client.get(url).send().await
 }
 
 pub fn parse_url(url: &Url) -> Result<UrlInfo> {
     if url.domain() != Some("archiveofourown.org") {
-        return Err(Error::msg("Provided URL is not an AO3 URL"))
+        return Err(Error::msg("Provided URL is not an AO3 URL"));
     }
-    
+
     let re = Regex::new(r"(?<type>works|series)/(?<id>\d+)").unwrap();
     let Some(caps) = re.captures(url.as_str()) else {
         let message = format!("URL {url} is not for a work or series");
         eprintln!("{message}");
-        return Err(Error::msg(message))
+        return Err(Error::msg(message));
     };
-    
+
     Ok(UrlInfo {
         page_type: PageType::from_str(&caps["type"])
             .with_context(|| format!("Invalid page type {}", &caps["type"]))?,
@@ -204,14 +208,17 @@ pub fn sanitise_string(string: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use indexmap::IndexMap;
-    
+    use std::collections::HashMap;
+
     #[test]
     fn parse_valid_work_url() {
         assert_eq!(
             parse_url(&Url::parse("https://archiveofourown.org/works/123456").unwrap()).unwrap(),
-            UrlInfo { page_type: PageType::Work, id: "123456".to_string() }
+            UrlInfo {
+                page_type: PageType::Work,
+                id: "123456".to_string()
+            }
         );
     }
 
@@ -219,22 +226,33 @@ mod tests {
     fn parse_series_url() {
         assert_eq!(
             parse_url(&Url::parse("https://archiveofourown.org/series/123456").unwrap()).unwrap(),
-            UrlInfo { page_type: PageType::Series, id: "123456".to_string() }
+            UrlInfo {
+                page_type: PageType::Series,
+                id: "123456".to_string()
+            }
         );
     }
 
     #[test]
     fn parse_work_in_collection_url() {
         assert_eq!(
-            parse_url(&Url::parse("https://archiveofourown.org/collections/aaaaa/works/654321").unwrap()).unwrap(),
-            UrlInfo { page_type: PageType::Work, id: "654321".to_string() }
+            parse_url(
+                &Url::parse("https://archiveofourown.org/collections/aaaaa/works/654321").unwrap()
+            )
+            .unwrap(),
+            UrlInfo {
+                page_type: PageType::Work,
+                id: "654321".to_string()
+            }
         );
     }
-    
+
     #[test]
     fn error_on_non_ao3_url() {
         assert_eq!(
-            parse_url(&Url::parse("https://google.com").unwrap()).unwrap_err().to_string(),
+            parse_url(&Url::parse("https://google.com").unwrap())
+                .unwrap_err()
+                .to_string(),
             "Provided URL is not an AO3 URL"
         );
     }
@@ -242,22 +260,23 @@ mod tests {
     #[test]
     fn error_on_invalid_ao3_url() {
         assert_eq!(
-            parse_url(&Url::parse("https://archiveofourown.org/users/bob").unwrap()).unwrap_err().to_string(),
+            parse_url(&Url::parse("https://archiveofourown.org/users/bob").unwrap())
+                .unwrap_err()
+                .to_string(),
             "URL https://archiveofourown.org/users/bob is not for a work or series"
         );
     }
 
     #[test]
     fn map() {
-        let config = Config::new()
-            .fandom_map(HashMap::from([
-                ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
-                ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
-                (
-                    "Fandom 2 the big boy returns".to_owned(),
-                    "Fandom 2".to_owned(),
-                ),
-            ]));
+        let config = Config::new().fandom_map(HashMap::from([
+            ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
+            ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
+            (
+                "Fandom 2 the big boy returns".to_owned(),
+                "Fandom 2".to_owned(),
+            ),
+        ]));
 
         assert_eq!(
             filter_fandoms(
@@ -270,15 +289,14 @@ mod tests {
 
     #[test]
     fn map_lets_unmatched_fandoms_through() {
-        let config = Config::new()
-            .fandom_map(HashMap::from([
-                ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
-                ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
-                (
-                    "Fandom 2 the big boy returns".to_owned(),
-                    "Fandom 2".to_owned(),
-                ),
-            ]));
+        let config = Config::new().fandom_map(HashMap::from([
+            ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
+            ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
+            (
+                "Fandom 2 the big boy returns".to_owned(),
+                "Fandom 2".to_owned(),
+            ),
+        ]));
 
         assert_eq!(
             filter_fandoms(
@@ -300,7 +318,10 @@ mod tests {
                     "Fandom 2".to_owned(),
                 ),
             ]))
-            .fandom_filter(IndexMap::from([("Fandom 1".to_owned(), vec!["*".to_owned()])]));
+            .fandom_filter(IndexMap::from([(
+                "Fandom 1".to_owned(),
+                vec!["*".to_owned()],
+            )]));
 
         assert_eq!(
             filter_fandoms(
@@ -334,10 +355,7 @@ mod tests {
 
         assert_eq!(
             filter_fandoms(
-                &vec![
-                    "Fandom 1".to_owned(),
-                    "Fandom 2".to_owned(),
-                ],
+                &vec!["Fandom 1".to_owned(), "Fandom 2".to_owned(),],
                 &config
             ),
             "Fandom 1"
@@ -346,11 +364,10 @@ mod tests {
 
     #[test]
     fn filter() {
-        let config = Config::new()
-            .fandom_filter(IndexMap::from([
-                ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
-                ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-            ]));
+        let config = Config::new().fandom_filter(IndexMap::from([
+            ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
+            ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
+        ]));
 
         assert_eq!(
             filter_fandoms(&vec!["Fandom 1".to_owned(), "Fandom 2".to_owned()], &config),

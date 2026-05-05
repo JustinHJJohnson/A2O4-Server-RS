@@ -37,33 +37,33 @@ pub async fn upload_work(
         Path::new(&config.download_path).join(&filename)
     };
 
-    let mut file = File::open(&file_path)
-        .with_context(|| format!(
+    let mut file = File::open(&file_path).with_context(|| {
+        format!(
             "Failed to open file {} for work {}",
             file_path.display(),
             work.title
-        ))?;
+        )
+    })?;
     let mut file_contents = Vec::new();
-    file.read_to_end(&mut file_contents)
-        .with_context(|| format!(
+    file.read_to_end(&mut file_contents).with_context(|| {
+        format!(
             "Failed to read file {} for work {}",
             file_path.display(),
             work.title
-        ))?;
-    
+        )
+    })?;
+
     println!("Starting to upload file: {}", &filename);
     let file_length = file_contents.len();
     println!("file is {file_length} bytes");
 
     let remote_download_folder = Path::new(&device.download_folder);
     let mut remote_file_path = PathBuf::from(remote_download_folder);
-    remote_file_path.push(
-        if let Some(unwrapped_series) = series {
-            unwrapped_series.filtered_fandom.clone()
-        } else {
-            work.filtered_fandom.clone()
-        }
-    );
+    remote_file_path.push(if let Some(unwrapped_series) = series {
+        unwrapped_series.filtered_fandom.clone()
+    } else {
+        work.filtered_fandom.clone()
+    });
     if work.filtered_fandom == "Original Work" {
         remote_file_path.push(work.author.clone());
     }
@@ -79,25 +79,27 @@ pub async fn upload_work(
             remote_download_folder,
         )?;
     }
-    
-    let mut remote_file = sftp.create(Path::new(&remote_file_path))
-        .with_context(|| format!(
+
+    let mut remote_file = sftp.create(Path::new(&remote_file_path)).with_context(|| {
+        format!(
             "Failed to create remote file {} for work {}",
             &remote_file_path.to_str().unwrap(),
             work.title
-        ))?;
+        )
+    })?;
 
     let chunk_size = 15000;
 
     for chunk in file_contents.chunks(chunk_size).enumerate() {
-        remote_file.write_all(chunk.1)
-            .with_context(|| format!(
+        remote_file.write_all(chunk.1).with_context(|| {
+            format!(
                 "Failed while writing remote file chunk for file {} for work {}",
                 file_path.to_str().unwrap(),
                 work.title
-            ))?;
+            )
+        })?;
     }
-    
+
     Ok(())
 }
 
@@ -127,7 +129,8 @@ pub async fn upload_series(
             download_format,
             Some(&sftp),
             Some(series),
-        ).await?;
+        )
+        .await?;
     }
     Ok(())
 }
@@ -147,51 +150,51 @@ fn create_missing_folders_on_remote(
     for path in remote_file_iterator {
         if sftp.lstat(path).is_err() {
             // TODO maybe set more restrictive permissions
-            sftp.mkdir(path, 0o777).with_context(|| format!(
-                "Failed to make missing folder {} on remote for work",
-                path.display()
-            ))?; 
+            sftp.mkdir(path, 0o777).with_context(|| {
+                format!(
+                    "Failed to make missing folder {} on remote for work",
+                    path.display()
+                )
+            })?;
         }
     }
-    
+
     Ok(())
 }
 
 pub fn create_sftp_connection(device: &Device) -> Result<Sftp> {
-    let tcp = TcpStream::connect((device.ip.clone(), device.port))
-        .with_context(|| format!(
+    let tcp = TcpStream::connect((device.ip.clone(), device.port)).with_context(|| {
+        format!(
             "Failed to connect to device {} at {}:{}",
-            device.name,
-            device.ip,
-            device.port
-        ))?;
-    let mut session = Session::new()
-        .with_context(|| format!(
+            device.name, device.ip, device.port
+        )
+    })?;
+    let mut session = Session::new().with_context(|| {
+        format!(
             "Failed to setup SSH session for device {} at {}:{}",
-            device.name,
-            device.ip,
-            device.port
-        ))?;
+            device.name, device.ip, device.port
+        )
+    })?;
     session.set_tcp_stream(tcp);
-    session.handshake().with_context(|| format!(
-        "Failed handshake with device {} at {}:{}",
-        device.name,
-        device.ip,
-        device.port
-    ))?;
+    session.handshake().with_context(|| {
+        format!(
+            "Failed handshake with device {} at {}:{}",
+            device.name, device.ip, device.port
+        )
+    })?;
     session
         .userauth_password(&device.username, &device.password)
-        .with_context(|| format!(
-            "Failed to authenticate with device {} at {}:{}",
-            device.name,
-            device.ip,
-            device.port
-        ))?;
+        .with_context(|| {
+            format!(
+                "Failed to authenticate with device {} at {}:{}",
+                device.name, device.ip, device.port
+            )
+        })?;
     session.set_blocking(true);
-    Ok(session.sftp().with_context(|| format!(
-        "Failed to initialise SFTP with device {} at {}:{}",
-        device.name,
-        device.ip,
-        device.port
-    ))?)
+    session.sftp().with_context(|| {
+        format!(
+            "Failed to initialise SFTP with device {} at {}:{}",
+            device.name, device.ip, device.port
+        )
+    })
 }
