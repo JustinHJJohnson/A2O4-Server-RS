@@ -1,22 +1,29 @@
-use crate::ao3::common::{filter_fandoms, get_series_pages, sanitise_string, DownloadFormat};
-use crate::ao3::user::User;
-use crate::ao3::work::Work;
+use crate::ao3::{
+    common::{filter_fandoms, get_series_pages, sanitise_string, DownloadFormat},
+    user::User,
+    work::Work,
+};
 use crate::config::Config;
 
 use anyhow::Result;
+use derive_builder::Builder;
 use scraper::Selector;
-use std::collections::HashSet;
-use std::fs::read_dir;
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    fs::read_dir,
+    io::ErrorKind,
+    path::{Path, PathBuf}
+};
 use tokio::fs::create_dir;
 
+#[derive(Builder, Default)]
+#[builder(default)]
 pub struct Series {
     pub id: String,
     pub title: String,
-    creator: String,
-    series_begun: String,   // TODO make some sort of date type
-    series_updated: String, // TODO make some sort of date type
+    pub creator: String,
+    begun: String,   // TODO make some sort of date type
+    updated: String, // TODO make some sort of date type
     description: String,
     num_words: u32,
     num_works: u32,
@@ -38,8 +45,8 @@ impl std::fmt::Display for Series {
             self.id,
             self.title,
             self.creator,
-            self.series_begun,
-            self.series_updated,
+            self.begun,
+            self.updated,
             self.description,
             self.num_words,
             self.num_works,
@@ -54,16 +61,16 @@ impl std::fmt::Display for Series {
 }
 
 impl Series {
-    pub fn test_series(title: String, fandom: String, config: &Config) -> Result<Series> {
+    pub fn test_series(title: &str, fandom: String, config: &Config) -> Result<Series> {
         let (works, num_works) =
-            Self::load_series_works_from_local(title.clone(), fandom.clone(), config)?;
+            Self::load_series_works_from_local(title, &fandom, config)?;
 
         Ok(Series {
             id: "1".to_owned(),
-            title: sanitise_string(&*title),
+            title: sanitise_string(title),
             creator: "bob".to_owned(),
-            series_begun: "at some point".to_owned(),
-            series_updated: "sure".to_owned(),
+            begun: "at some point".to_owned(),
+            updated: "sure".to_owned(),
             description: "yes".to_owned(),
             num_words: 1,
             num_works,
@@ -77,8 +84,8 @@ impl Series {
     }
 
     fn load_series_works_from_local(
-        title: String,
-        fandom: String,
+        title: &str,
+        fandom: &str,
         config: &Config,
     ) -> Result<(Vec<Work>, u32)> {
         let series_path = Path::new(&config.download_path).join(title.clone());
@@ -154,8 +161,8 @@ impl Series {
             .unwrap_or(document.select(&anonymous_creator_selector).next().unwrap())
             .text()
             .collect();
-        let series_begun: String = series_date_select.next().unwrap().text().collect();
-        let series_updated: String = series_date_select.next().unwrap().text().collect();
+        let begun: String = series_date_select.next().unwrap().text().collect();
+        let updated: String = series_date_select.next().unwrap().text().collect();
         let description: String = document
             .select(&description_selector)
             .next()
@@ -200,8 +207,7 @@ impl Series {
             .unwrap_or_else(|_| panic!("Failed to convert {raw_num_works} to u32"));
         let is_completed: bool = match raw_is_completed.as_str() {
             "Yes" => true,
-            "No" => false,
-            _ => false,
+            "No" | _ => false,
         };
         let num_bookmarks: u32 = raw_num_bookmarks
             .replace(&[',', '.'][..], "")
@@ -235,8 +241,8 @@ impl Series {
             id: id.to_owned(),
             title: sanitise_string(&title),
             creator,
-            series_begun,
-            series_updated,
+            begun,
+            updated,
             description,
             num_words,
             num_works,
@@ -257,14 +263,14 @@ impl Series {
     ) -> std::io::Result<()> {
         let series_path = path.join(&self.title);
         match create_dir(&series_path).await {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(error) => match error.kind() {
                 ErrorKind::AlreadyExists => {}
                 _ => return Err(error),
             },
-        };
+        }
         for work in &self.works {
-            let _ = work.download(&series_path, format, Some(&self), user).await;
+            let _ = work.download(&series_path, format, Some(self), user).await;
             println!();
         }
         Ok(())

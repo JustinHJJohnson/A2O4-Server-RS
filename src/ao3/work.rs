@@ -1,15 +1,22 @@
-use crate::ao3::common::{filter_fandoms, get_page, sanitise_string, DownloadFormat};
-use crate::ao3::user::User;
+use crate::ao3::{
+    common::{filter_fandoms, get_page, sanitise_string, DownloadFormat},
+    user::User,
+    series::Series,
+};
 use crate::config::Config;
 
-use crate::ao3::series::Series;
 use anyhow::{Context, Result};
+use derive_builder::Builder;
 use scraper::{ElementRef, Selector};
-use std::collections::HashMap;
-use std::path::Path;
-use std::str::FromStr;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
+use std::{
+    collections::HashMap,
+    path::Path,
+    str::FromStr,
+};
+use tokio::{
+    fs::File,
+    io::AsyncWriteExt,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SeriesLink {
@@ -18,7 +25,8 @@ pub struct SeriesLink {
     pub part_in_series: u8,
 }
 
-#[derive(Debug)]
+#[derive(Builder, Debug, Default, Clone)]
+#[builder(default)]
 pub struct Work {
     pub id: String,
     pub title: String,

@@ -1,22 +1,27 @@
-use crate::{ao3::user::User, config::Config};
+use crate::{
+    ao3::user::User,
+    config::Config
+};
 
 use anyhow::{Context, Error, Result};
 use enum_iterator::Sequence;
 use regex::Regex;
-use reqwest;
 use reqwest::{Response, StatusCode};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::str::FromStr;
+use std::{
+    collections::HashSet,
+    str::FromStr,
+};
 use strum_macros::{Display, EnumString};
 use url::Url;
 
 #[derive(
-    Debug, EnumString, PartialEq, Eq, Hash, Display, Sequence, Clone, Copy, Serialize, Deserialize,
+    Debug, Default, EnumString, PartialEq, Eq, Hash, Display, Sequence, Clone, Copy, Serialize, Deserialize,
 )]
 pub enum DownloadFormat {
     AZW3,
+    #[default]
     EPUB,
     MOBI,
     PDF,
@@ -35,7 +40,7 @@ impl std::fmt::Display for PageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PageType::Work => write!(f, "work"),
-            _ => write!(f, "series"),
+            PageType::Series => write!(f, "series"),
         }
     }
 }
@@ -141,7 +146,7 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
     for fandom in fandoms {
         if config.fandom_map.contains_key(fandom) {
             mapped_fandoms.remove(fandom);
-            mapped_fandoms.insert(config.fandom_map.get(fandom).unwrap().to_string());
+            mapped_fandoms.insert(config.fandom_map.get(fandom).unwrap().clone());
         }
     }
 
@@ -166,7 +171,7 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
             .iter()
             .next()
             .unwrap()
-            .to_string()
+            .clone()
     }
 }
 
@@ -183,7 +188,7 @@ pub fn parse_url(url: &Url) -> Result<UrlInfo> {
         return Err(Error::msg("Provided URL is not an AO3 URL"));
     }
 
-    let re = Regex::new(r"(?<type>works|series)/(?<id>\d+)").unwrap();
+    let re = Regex::new(r"(?<type>works|series)/(?<id>\d+)")?;
     let Some(caps) = re.captures(url.as_str()) else {
         let message = format!("URL {url} is not for a work or series");
         eprintln!("{message}");
@@ -208,6 +213,7 @@ pub fn sanitise_string(string: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ConfigBuilder;
     use indexmap::IndexMap;
     use std::collections::HashMap;
 
@@ -269,14 +275,17 @@ mod tests {
 
     #[test]
     fn map() {
-        let config = Config::new().fandom_map(HashMap::from([
-            ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
-            ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
-            (
-                "Fandom 2 the big boy returns".to_owned(),
-                "Fandom 2".to_owned(),
-            ),
-        ]));
+        let config = ConfigBuilder::default()
+            .fandom_map(HashMap::from([
+                ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
+                ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
+                (
+                    "Fandom 2 the big boy returns".to_owned(),
+                    "Fandom 2".to_owned(),
+                ),
+            ]))
+            .build()
+            .unwrap();
 
         assert_eq!(
             filter_fandoms(
@@ -289,14 +298,17 @@ mod tests {
 
     #[test]
     fn map_lets_unmatched_fandoms_through() {
-        let config = Config::new().fandom_map(HashMap::from([
-            ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
-            ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
-            (
-                "Fandom 2 the big boy returns".to_owned(),
-                "Fandom 2".to_owned(),
-            ),
-        ]));
+        let config = ConfigBuilder::default()
+            .fandom_map(HashMap::from([
+                ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
+                ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
+                (
+                    "Fandom 2 the big boy returns".to_owned(),
+                    "Fandom 2".to_owned(),
+                ),
+            ]))
+            .build()
+            .unwrap();
 
         assert_eq!(
             filter_fandoms(
@@ -309,7 +321,7 @@ mod tests {
 
     #[test]
     fn map_removes_all() {
-        let config = Config::new()
+        let config = ConfigBuilder::default()
             .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
@@ -321,7 +333,9 @@ mod tests {
             .fandom_filter(IndexMap::from([(
                 "Fandom 1".to_owned(),
                 vec!["*".to_owned()],
-            )]));
+            )]))
+            .build()
+            .unwrap();
 
         assert_eq!(
             filter_fandoms(
@@ -339,7 +353,7 @@ mod tests {
 
     #[test]
     fn map_applies_in_order() {
-        let config = Config::new()
+        let config = ConfigBuilder::default()
             .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
@@ -351,7 +365,9 @@ mod tests {
             .fandom_filter(IndexMap::from([
                 ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
                 ("Fandom 2".to_owned(), vec!["Fandom 1".to_owned()]),
-            ]));
+            ]))
+            .build()
+            .unwrap();
 
         assert_eq!(
             filter_fandoms(
@@ -364,10 +380,13 @@ mod tests {
 
     #[test]
     fn filter() {
-        let config = Config::new().fandom_filter(IndexMap::from([
-            ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
-            ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-        ]));
+        let config = ConfigBuilder::default()
+            .fandom_filter(IndexMap::from([
+                ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
+                ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
+            ]))
+            .build()
+            .unwrap();
 
         assert_eq!(
             filter_fandoms(&vec!["Fandom 1".to_owned(), "Fandom 2".to_owned()], &config),
@@ -377,7 +396,7 @@ mod tests {
 
     #[test]
     fn map_and_filter() {
-        let config = Config::new()
+        let config = ConfigBuilder::default()
             .fandom_map(HashMap::from([
                 ("Fandom 1 the big boy".to_owned(), "Fandom 1".to_owned()),
                 ("Fandom 1 TBB".to_owned(), "Fandom 1".to_owned()),
@@ -389,7 +408,9 @@ mod tests {
             .fandom_filter(IndexMap::from([
                 ("Fandom 1".to_owned(), vec!["Fandom 2".to_owned()]),
                 ("Fandom 2".to_owned(), vec!["Fandom 3".to_owned()]),
-            ]));
+            ]))
+            .build()
+            .unwrap();
 
         assert_eq!(
             filter_fandoms(

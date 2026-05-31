@@ -1,13 +1,22 @@
 use crate::ao3::common::DownloadFormat;
+use crate::clients::{
+    client::Clients,
+    crosspoint::Crosspoint,
+    sftp::Sftp,
+};
 
+use derive_builder::Builder;
 use directories::ProjectDirs;
 use indexmap::IndexMap;
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::fs::{create_dir, File};
-use std::io::Read;
+use std::{
+    collections::HashMap,
+    fs::{create_dir, File},
+    io::Read,
+};
 
-#[derive(Debug, Deserialize)]
+#[derive(Builder, Debug, Default, Deserialize)]
+#[builder(default)]
 pub struct Config {
     pub port: u16,
     pub download_path: String,
@@ -19,73 +28,10 @@ pub struct Config {
     pub fandom_filter: IndexMap<String, Vec<String>>,
 }
 
+
 impl Config {
-    pub(crate) fn new() -> Self {
-        Self {
-            port: Default::default(),
-            download_path: Default::default(),
-            ao3_username: Default::default(),
-            ao3_password: Default::default(),
-            default_format: DownloadFormat::EPUB,
-            devices: Default::default(),
-            fandom_map: Default::default(),
-            fandom_filter: Default::default(),
-        }
-    }
-
-    pub fn get_device_by_name(&self, name: String) -> Option<&Device> {
+    pub fn get_device_by_name(&self, name: &str) -> Option<&Device> {
         self.devices.iter().find(|d| d.name == name)
-    }
-
-    pub fn get_device_by_name_or_first(&self, name: Option<String>) -> &Device {
-        if let Some(device_name) = name {
-            match self.get_device_by_name(device_name) {
-                Some(device) => device,
-                None => self.devices.first().unwrap(),
-            }
-        } else {
-            self.devices.first().unwrap()
-        }
-    }
-
-    pub fn port(mut self, port: u16) -> Self {
-        self.port = port;
-        self
-    }
-
-    pub fn download_path(mut self, download_path: String) -> Self {
-        self.download_path = download_path;
-        self
-    }
-
-    pub fn ao3_username(mut self, username: String) -> Self {
-        self.ao3_username = Some(username);
-        self
-    }
-
-    pub fn ao3_password(mut self, password: String) -> Self {
-        self.ao3_password = Some(password);
-        self
-    }
-
-    pub fn default_format(mut self, format: DownloadFormat) -> Self {
-        self.default_format = format;
-        self
-    }
-
-    pub fn devices(mut self, devices: Vec<Device>) -> Self {
-        self.devices = devices;
-        self
-    }
-
-    pub fn fandom_map(mut self, fandom_map: HashMap<String, String>) -> Self {
-        self.fandom_map = fandom_map;
-        self
-    }
-
-    pub fn fandom_filter(mut self, fandom_filter: IndexMap<String, Vec<String>>) -> Self {
-        self.fandom_filter = fandom_filter;
-        self
     }
 }
 
@@ -98,6 +44,21 @@ pub struct Device {
     pub password: String,
     pub download_folder: String,
     pub uses_koreader: Option<bool>,
+    #[serde(deserialize_with = "deserialize_client")]
+    pub client: Clients,
+}
+
+fn deserialize_client<'de, D>(deserializer: D) -> Result<Clients, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    match s.as_str() {
+        "sftp" => Ok(Clients::Sftp(Sftp {})),
+        "crosspoint" => Ok(Clients::Crosspoint(Crosspoint {})),
+        _ => Err(serde::de::Error::custom(format!("invalid client: '{s}'"))),
+    }
 }
 
 pub async fn read_config() -> Result<Config, String> {

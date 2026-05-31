@@ -1,25 +1,33 @@
 mod ao3;
+mod clients;
 mod config;
-mod sftp;
 
-use crate::ao3::common::{parse_url, DownloadFormat, PageType};
-use crate::ao3::series::Series;
-use crate::ao3::user;
-use crate::ao3::work::Work;
+use crate::ao3::{
+    common::{parse_url, DownloadFormat, PageType},
+    series::Series,
+    user,
+    work::Work,
+};
+use crate::clients::client::Client;
 use crate::config::read_config;
-use crate::sftp::{upload_series, upload_work};
-use std::ffi::OsStr;
 
 use epub::doc::EpubDoc;
-use rocket::fairing::{Fairing, Info, Kind};
-use rocket::http::{Header, Status};
-use rocket::response::content;
-use rocket::serde::json::Json;
-use rocket::{Request, Response, State};
+use rocket::{
+    fairing::{Fairing, Info, Kind},
+    http::{Header, Status},
+    response::content,
+    Request,
+    Response,
+    serde::json::Json,
+    State,
+};
 use serde::Deserialize;
 use serde_json::to_string_pretty;
-use std::fs::{read_dir, File};
-use std::io::prelude::*;
+use std::{
+    fs::{read_dir, File},
+    io::prelude::*,
+    ffi::OsStr
+};
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -53,6 +61,7 @@ struct DownloadRequest {
     url: String,
     device: String,
     fandom_override: Option<String>,
+    format: Option<DownloadFormat>,
 }
 
 #[get("/")]
@@ -62,7 +71,7 @@ fn index() -> content::RawHtml<&'static str> {
 
 #[post("/download", format = "json", data = "<request>")]
 async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (Status, String) {
-    let Ok(url) = Url::parse(&*request.url) else {
+    let Ok(url) = Url::parse(&request.url) else {
         return (
             Status::BadRequest,
             String::from("Could not parse provided URL"),
@@ -84,14 +93,15 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
         }
     };
 
-    let Some(device) = config.get_device_by_name(request.device.clone()) else {
+    let Some(device) = config.get_device_by_name(&request.device) else {
         return (
             Status::BadRequest,
             format!("Could not find device {}", request.device),
         );
     };
 
-    //TODO should also log any errors
+    let download_format = request.format.unwrap_or(config.default_format);
+
     match url_info.page_type {
         PageType::Work => {
             let work_result =
@@ -103,7 +113,7 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
             let download_result = work
                 .download(
                     Path::new(&config.download_path),
-                    DownloadFormat::EPUB,
+                    download_format,
                     None,
                     user,
                 )
@@ -114,8 +124,14 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result =
-                upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await;
+            let upload_result = device.client.upload_work(
+                &work,
+                device,
+                &config,
+                download_format,
+                None,
+            )
+            .await;
             let Ok(()) = upload_result else {
                 return (Status::BadRequest, upload_result.err().unwrap().to_string());
             };
@@ -126,7 +142,7 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                 return (Status::BadRequest, series_result.err().unwrap().to_string());
             };
             let download_result = series
-                .download(Path::new(&config.download_path), DownloadFormat::EPUB, user)
+                .download(Path::new(&config.download_path), download_format, user)
                 .await;
             let Ok(()) = download_result else {
                 return (
@@ -134,7 +150,8 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result = upload_series(&series, device, &config, DownloadFormat::EPUB).await;
+            let upload_result =
+                device.client.upload_series(&series, device, &config, download_format).await;
             let Ok(()) = upload_result else {
                 return (Status::BadRequest, upload_result.err().unwrap().to_string());
             };
@@ -187,7 +204,7 @@ async fn upload_work_api(request: Json<UploadWorkRequest>) -> (Status, String) {
         }
     };
 
-    let Some(device) = config.get_device_by_name(request.device.clone()) else {
+    let Some(device) = config.get_device_by_name(&request.device) else {
         return (
             Status::BadRequest,
             format!("Could not find device {}", request.device),
@@ -198,31 +215,29 @@ async fn upload_work_api(request: Json<UploadWorkRequest>) -> (Status, String) {
         request.work.clone(),
         request.fandom.clone(),
         request.series.clone().map(|x| x.title),
-        Some(request.part_in_series.unwrap()),
+        request.part_in_series,
     );
 
     if let Some(unwrapped_series) = &request.series {
         let dummy_series = Series::test_series(
-            unwrapped_series.title.clone(),
+            &unwrapped_series.title,
             unwrapped_series.fandom.clone(),
             &config,
         )
         .unwrap();
-        let upload_result = upload_work(
+        let upload_result = device.client.upload_work(
             &work,
             device,
             &config,
             DownloadFormat::EPUB,
-            None,
             Some(&dummy_series),
-        )
-        .await;
+        ).await;
         let Ok(()) = upload_result else {
             return (Status::BadRequest, upload_result.err().unwrap().to_string());
         };
     } else {
         let upload_result =
-            upload_work(&work, device, &config, DownloadFormat::EPUB, None, None).await;
+            device.client.upload_work(&work, device, &config, DownloadFormat::EPUB, None).await;
         let Ok(()) = upload_result else {
             let error = upload_result.err().unwrap();
             println!("{}", error.root_cause());
@@ -258,14 +273,14 @@ async fn upload_series_api(request: Json<UploadSeriesRequest>) -> (Status, Strin
         }
     };
 
-    let Some(device) = config.get_device_by_name(request.device.clone()) else {
+    let Some(device) = config.get_device_by_name(&request.device) else {
         return (
             Status::BadRequest,
             format!("Could not find device {}", request.device),
         );
     };
 
-    let series = match Series::test_series(request.series.clone(), request.fandom.clone(), &config)
+    let series = match Series::test_series(&request.series, request.fandom.clone(), &config)
     {
         Ok(series) => series,
         Err(error) => {
@@ -276,7 +291,8 @@ async fn upload_series_api(request: Json<UploadSeriesRequest>) -> (Status, Strin
         }
     };
 
-    let upload_result = upload_series(&series, device, &config, DownloadFormat::EPUB).await;
+    let upload_result =
+        device.client.upload_series(&series, device, &config, DownloadFormat::EPUB).await;
     let Ok(()) = upload_result else {
         let error = upload_result.err().unwrap();
         println!("{}", error.root_cause());

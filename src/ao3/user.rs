@@ -3,8 +3,10 @@ use directories::ProjectDirs;
 use regex::Regex;
 use reqwest::Client;
 use reqwest_cookie_store::CookieStoreMutex;
-use std::path::Path;
-use std::sync::Arc;
+use std::{
+    path::Path,
+    sync::Arc,
+};
 
 pub struct User {
     pub client: Client,
@@ -13,7 +15,7 @@ pub struct User {
 
 impl User {
     pub async fn new(username: &str, password: &str) -> Result<Self, String> {
-        let Ok(cookie_store) = Self::load_cookies().await else {
+        let Ok(cookie_store) = Self::load_cookies() else {
             return Err("Error loading cookies from disk".to_string());
         };
 
@@ -80,16 +82,16 @@ impl User {
         client
     }
 
-    async fn load_cookies() -> Result<Arc<CookieStoreMutex>, String> {
+    fn load_cookies() -> Result<Arc<CookieStoreMutex>, String> {
         if let Some(proj_dirs) = ProjectDirs::from("", "", env!("CARGO_PKG_NAME")) {
             let config_dir = proj_dirs.config_dir();
             let cookie_store = {
                 if let Ok(file) = std::fs::File::open(Path::new(&config_dir.join("cookies.json")))
                     .map(std::io::BufReader::new)
                 {
-                    reqwest_cookie_store::CookieStore::load_json(file).unwrap()
+                    cookie_store::serde::json::load(file).unwrap()
                 } else {
-                    reqwest_cookie_store::CookieStore::new(None)
+                    cookie_store::CookieStore::new()
                 }
             };
             let cookie_store = CookieStoreMutex::new(cookie_store);
@@ -108,7 +110,7 @@ impl User {
             let mut writer = std::fs::File::create(Path::new(&config_dir.join("cookies.json")))
                 .map(std::io::BufWriter::new)
                 .unwrap();
-            store.save_json(&mut writer).unwrap();
+            cookie_store::serde::json::save(&store, &mut writer).unwrap();
             Ok(())
         } else {
             Err("Failed to open config directory".into())
@@ -128,7 +130,7 @@ pub async fn get_user(config: Config) -> Result<User, String> {
     if let (Some(username), Some(password)) = (&config.ao3_username, &config.ao3_password) {
         match User::new(username, password).await {
             Ok(user) => Ok(user),
-            Err(error) => Err(format!("User Error {}", error)),
+            Err(error) => Err(format!("User Error {error}")),
         }
     } else {
         Err("Username or Password not provided in config file".to_string())
