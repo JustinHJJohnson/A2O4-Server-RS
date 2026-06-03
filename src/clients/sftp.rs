@@ -1,18 +1,11 @@
-use crate::ao3::{
-    common::DownloadFormat,
-    series::Series,
-    work::Work,
-};
-use crate::clients::{
-    client::Client,
-    common::{generate_remote_path, get_file_with_size},
-};
+use crate::ao3::{common::DownloadFormat, series::Series, work::Work};
+use crate::clients::client::Client;
 use crate::config::{Config, Device};
 
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use std::path::Path;
 use std::{io::Write, net::TcpStream};
-use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Sftp {}
@@ -26,7 +19,7 @@ impl Client for Sftp {
         download_format: DownloadFormat,
         series: Option<&Series>,
     ) -> Result<()> {
-        upload_work_bulk(work, device, config, download_format, None, series)?;
+        upload_work_bulk(self, work, device, config, download_format, None, series)?;
 
         Ok(())
     }
@@ -40,17 +33,14 @@ impl Client for Sftp {
     ) -> Result<()> {
         let sftp = create_sftp_connection(device)?;
 
-        let remote_series_folder = generate_remote_path(
-            None,
-            Some(series),
-            None,
-            &device.download_folder,
-        );
+        let remote_series_folder =
+            self.generate_remote_path(None, Some(series), None, &device.download_folder);
 
         create_missing_folders_on_remote(&sftp, &remote_series_folder)?;
 
         for work in &series.works {
             upload_work_bulk(
+                self,
                 work,
                 device,
                 config,
@@ -64,6 +54,7 @@ impl Client for Sftp {
 }
 
 fn upload_work_bulk(
+    parent: &Sftp,
     work: &Work,
     device: &Device,
     config: &Config,
@@ -80,18 +71,13 @@ fn upload_work_bulk(
     };
 
     let filename = work.get_filename(download_format, series.map(|x| &x.id));
-    let (file, size) =
-        get_file_with_size(work, series, &filename, &config.download_path)?;
+    let (file, size) = parent.get_file_with_size(work, series, &filename, &config.download_path)?;
 
     println!("Starting to upload file: {}", &filename);
     println!("file is {size} bytes");
 
-    let remote_file_path = generate_remote_path(
-        Some(work),
-        series,
-        Some(filename),
-        &device.download_folder
-    );
+    let remote_file_path =
+        parent.generate_remote_path(Some(work), series, Some(filename), &device.download_folder);
 
     if !using_existing_connection {
         create_missing_folders_on_remote(sftp, remote_file_path.parent().unwrap())?;

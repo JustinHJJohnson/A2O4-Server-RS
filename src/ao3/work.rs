@@ -1,22 +1,15 @@
 use crate::ao3::{
     common::{filter_fandoms, get_page, sanitise_string, DownloadFormat},
-    user::User,
     series::Series,
+    user::User,
 };
 use crate::config::Config;
 
 use anyhow::{Context, Result};
 use derive_builder::Builder;
 use scraper::{ElementRef, Selector};
-use std::{
-    collections::HashMap,
-    path::Path,
-    str::FromStr,
-};
-use tokio::{
-    fs::File,
-    io::AsyncWriteExt,
-};
+use std::{collections::HashMap, path::Path, str::FromStr};
+use tokio::{fs::File, io::AsyncWriteExt};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SeriesLink {
@@ -415,6 +408,13 @@ impl Work {
         work_file.write_all(&work).await.with_context(|| {
             format!(
                 "Error writing file for work {} at {}",
+                self.title,
+                download_path.display()
+            )
+        })?;
+        work_file.flush().await.with_context(|| {
+            format!(
+                "Error writing file during flush for work {} at {}",
                 self.title,
                 download_path.display()
             )

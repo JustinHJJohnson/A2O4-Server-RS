@@ -12,7 +12,7 @@ use std::{
     collections::HashSet,
     fs::read_dir,
     io::ErrorKind,
-    path::{Path, PathBuf}
+    path::{Path, PathBuf},
 };
 use tokio::fs::create_dir;
 
@@ -62,8 +62,7 @@ impl std::fmt::Display for Series {
 
 impl Series {
     pub fn test_series(title: &str, fandom: String, config: &Config) -> Result<Series> {
-        let (works, num_works) =
-            Self::load_series_works_from_local(title, &fandom, config)?;
+        let (works, num_works) = Self::load_series_works_from_local(title, &fandom, config)?;
 
         Ok(Series {
             id: "1".to_owned(),
@@ -88,7 +87,7 @@ impl Series {
         fandom: &str,
         config: &Config,
     ) -> Result<(Vec<Work>, u32)> {
-        let series_path = Path::new(&config.download_path).join(title.clone());
+        let series_path = Path::new(&config.download_path).join(title);
         let works = read_dir(series_path.clone())?;
         let mut num_works = 0;
 

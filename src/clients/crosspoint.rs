@@ -1,13 +1,10 @@
 use crate::{
     ao3::{common::DownloadFormat, series::Series, work::Work},
-    clients::{
-        client::Client,
-        common::{generate_remote_path, get_file_with_size}
-    },
+    clients::client::Client,
     config::{Config, Device},
 };
 
-use anyhow::{anyhow, format_err, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use reqwest_websocket::{Message, Upgrade};
 use rocket::futures::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -25,7 +22,7 @@ impl Client for Crosspoint {
         download_format: DownloadFormat,
         series: Option<&Series>,
     ) -> Result<()> {
-        upload_work_bulk(work, device, config, download_format, series, false).await?;
+        upload_work_bulk(self, work, device, config, download_format, series, false).await?;
         Ok(())
     }
 
@@ -36,31 +33,31 @@ impl Client for Crosspoint {
         config: &Config,
         download_format: DownloadFormat,
     ) -> Result<()> {
-        let remote_series_folder = generate_remote_path(
-            None,
-            Some(series),
-            None,
-            &device.download_folder
-        );
+        let remote_series_folder =
+            self.generate_remote_path(None, Some(series), None, &device.download_folder);
 
         create_missing_folders_on_remote(device.ip.clone(), &remote_series_folder).await?;
 
         for work in &series.works {
             upload_work_bulk(
+                self,
                 work,
                 device,
                 config,
                 download_format,
                 Some(series),
                 true,
-            ).await?;
+            )
+            .await?;
         }
 
         Ok(())
     }
 }
 
+//TODO try out https://lib.rs/crates/fast_websocket_client
 async fn upload_work_bulk(
+    parent: &Crosspoint,
     work: &Work,
     device: &Device,
     config: &Config,
@@ -69,15 +66,10 @@ async fn upload_work_bulk(
     is_bulk: bool,
 ) -> Result<()> {
     let filename = work.get_filename(download_format, series.map(|x| &x.id));
-    let (file, size) =
-        get_file_with_size(work, series, &filename, &config.download_path)?;
+    let (file, size) = parent.get_file_with_size(work, series, &filename, &config.download_path)?;
 
-    let remote_file_path = generate_remote_path(
-        Some(work),
-        series,
-        None,
-        &device.download_folder,
-    );
+    let remote_file_path =
+        parent.generate_remote_path(Some(work), series, None, &device.download_folder);
 
     if !is_bulk {
         create_missing_folders_on_remote(device.ip.clone(), &remote_file_path).await?;
@@ -96,15 +88,13 @@ async fn upload_work_bulk(
     let start_message = format!(
         "START:{filename}:{size}:{}",
         remote_file_path.to_str().with_context(|| {
-            format!(
-                "failed to covert file path '{remote_file_path:?}' to string",
-            )
+            format!("failed to covert file path '{remote_file_path:?}' to string",)
         })?
     );
 
     println!("{start_message}");
 
-    let write_task = tokio::spawn(async move {
+    let _write_task = tokio::spawn(async move {
         sink.send(Message::Text(start_message)).await.unwrap();
 
         let chunk_size = 8192;
@@ -112,12 +102,12 @@ async fn upload_work_bulk(
         for chunk in file.chunks(chunk_size) {
             let message = Message::Binary(chunk.to_vec().into());
             if let Some(error) = sink.send(message).await.err() {
-                println!("Failed to send chunk with error: {error}");
-                break;
+                return Err(anyhow!("Failed to send chunk with error: {error}"));
             }
         }
-    });
 
+        Ok(())
+    });
 
     let title = work.title.clone();
     let read_task = tokio::spawn(async move {
@@ -125,19 +115,20 @@ async fn upload_work_bulk(
             if let Message::Text(text) = message {
                 println!("Received: {text}");
 
-                if text.starts_with("DONE"){
-                    return Ok(());
+                if text.starts_with("DONE") {
+                    break;
                 } else if text.starts_with("ERROR") {
                     return Err(anyhow!(
                         "Error uploading work {} with filename {} to device: {}",
-                        filename,
                         title,
-                        text.split(':').next_back().unwrap())
-                    )
+                        filename,
+                        text.split(':').next_back().unwrap()
+                    ));
                 }
             }
         }
-        Ok::<_, anyhow::Error>(())
+
+        Ok(())
     });
 
     read_task.await?
