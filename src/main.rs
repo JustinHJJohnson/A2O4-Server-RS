@@ -16,19 +16,17 @@ use rocket::{
     fairing::{Fairing, Info, Kind},
     http::{Header, Status},
     response::content,
-    Request,
-    Response,
     serde::json::Json,
-    State,
+    Request, Response, State,
 };
 use serde::Deserialize;
 use serde_json::to_string_pretty;
+use std::path::{Path, PathBuf};
 use std::{
+    ffi::OsStr,
     fs::{read_dir, File},
     io::prelude::*,
-    ffi::OsStr
 };
-use std::path::{Path, PathBuf};
 use url::Url;
 
 #[macro_use]
@@ -67,6 +65,25 @@ struct DownloadRequest {
 #[get("/")]
 fn index() -> content::RawHtml<&'static str> {
     content::RawHtml("Hello 👋")
+}
+
+type JsonResponse<T> = Result<Json<T>, (Status, String)>;
+
+#[get("/devices")]
+async fn get_devices() -> JsonResponse<Vec<String>> {
+    let config = match read_config().await {
+        Ok(config) => config,
+        Err(error) => {
+            return Err((
+                Status::InternalServerError,
+                format!("Config Error: {error}"),
+            ))
+        }
+    };
+
+    Ok(Json(
+        config.devices.iter().map(|x| x.name.clone()).collect(),
+    ))
 }
 
 #[post("/download", format = "json", data = "<request>")]
@@ -124,14 +141,10 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result = device.client.upload_work(
-                &work,
-                device,
-                &config,
-                download_format,
-                None,
-            )
-            .await;
+            let upload_result = device
+                .client
+                .upload_work(&work, device, &config, download_format, None)
+                .await;
             let Ok(()) = upload_result else {
                 return (Status::BadRequest, upload_result.err().unwrap().to_string());
             };
@@ -150,8 +163,10 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result =
-                device.client.upload_series(&series, device, &config, download_format).await;
+            let upload_result = device
+                .client
+                .upload_series(&series, device, &config, download_format)
+                .await;
             let Ok(()) = upload_result else {
                 return (Status::BadRequest, upload_result.err().unwrap().to_string());
             };
@@ -225,19 +240,24 @@ async fn upload_work_api(request: Json<UploadWorkRequest>) -> (Status, String) {
             &config,
         )
         .unwrap();
-        let upload_result = device.client.upload_work(
-            &work,
-            device,
-            &config,
-            DownloadFormat::EPUB,
-            Some(&dummy_series),
-        ).await;
+        let upload_result = device
+            .client
+            .upload_work(
+                &work,
+                device,
+                &config,
+                DownloadFormat::EPUB,
+                Some(&dummy_series),
+            )
+            .await;
         let Ok(()) = upload_result else {
             return (Status::BadRequest, upload_result.err().unwrap().to_string());
         };
     } else {
-        let upload_result =
-            device.client.upload_work(&work, device, &config, DownloadFormat::EPUB, None).await;
+        let upload_result = device
+            .client
+            .upload_work(&work, device, &config, DownloadFormat::EPUB, None)
+            .await;
         let Ok(()) = upload_result else {
             let error = upload_result.err().unwrap();
             println!("{}", error.root_cause());
@@ -280,8 +300,7 @@ async fn upload_series_api(request: Json<UploadSeriesRequest>) -> (Status, Strin
         );
     };
 
-    let series = match Series::test_series(&request.series, request.fandom.clone(), &config)
-    {
+    let series = match Series::test_series(&request.series, request.fandom.clone(), &config) {
         Ok(series) => series,
         Err(error) => {
             return (
@@ -291,8 +310,10 @@ async fn upload_series_api(request: Json<UploadSeriesRequest>) -> (Status, Strin
         }
     };
 
-    let upload_result =
-        device.client.upload_series(&series, device, &config, DownloadFormat::EPUB).await;
+    let upload_result = device
+        .client
+        .upload_series(&series, device, &config, DownloadFormat::EPUB)
+        .await;
     let Ok(()) = upload_result else {
         let error = upload_result.err().unwrap();
         println!("{}", error.root_cause());
@@ -372,6 +393,7 @@ async fn rocket() -> _ {
                 .mount("/", routes![upload_work_api])
                 .mount("/", routes![meta])
                 .mount("/", routes![healthcheck])
+                .mount("/", routes![get_devices])
         }
         Err(error) => {
             eprintln!("Config Error: {error}");
