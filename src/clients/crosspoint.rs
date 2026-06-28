@@ -1,7 +1,8 @@
 use crate::{
-    ao3::{common::DownloadFormat, series::Series, work::Work},
     clients::client::Client,
+    common::DownloadFormat,
     config::{Config, Device},
+    domain::{series::Series, work::Work},
 };
 
 use anyhow::{anyhow, Context, Result};

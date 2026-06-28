@@ -1,6 +1,9 @@
-use crate::ao3::{common::DownloadFormat, series::Series, work::Work};
-use crate::clients::{crosspoint::Crosspoint, sftp::Sftp};
-use crate::config::{Config, Device};
+use crate::{
+    clients::{crosspoint::Crosspoint, sftp::Sftp},
+    common::DownloadFormat,
+    config::{Config, Device},
+    domain::{series::Series, work::Work},
+};
 
 use anyhow::{Context, Error, Result};
 use enum_dispatch::enum_dispatch;
@@ -99,4 +102,3 @@ pub trait Client {
         remote_file_path
     }
 }
-

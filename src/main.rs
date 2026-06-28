@@ -1,15 +1,14 @@
-mod ao3;
 mod clients;
+mod common;
 mod config;
+mod domain;
 
-use crate::ao3::{
+use crate::{
+    clients::client::Client,
     common::{parse_url, DownloadFormat, PageType},
-    series::Series,
-    user,
-    work::Work,
+    config::read_config,
+    domain::{series::Series, user, work::Work},
 };
-use crate::clients::client::Client;
-use crate::config::read_config;
 
 use epub::doc::EpubDoc;
 use rocket::{
@@ -21,11 +20,11 @@ use rocket::{
 };
 use serde::Deserialize;
 use serde_json::to_string_pretty;
-use std::path::{Path, PathBuf};
 use std::{
     ffi::OsStr,
     fs::{read_dir, File},
     io::prelude::*,
+    path::{Path, PathBuf},
 };
 use url::Url;
 
@@ -54,14 +53,6 @@ impl Fairing for CORS {
     }
 }
 
-#[derive(Deserialize)]
-struct DownloadRequest {
-    url: String,
-    device: String,
-    fandom_override: Option<String>,
-    format: Option<DownloadFormat>,
-}
-
 #[get("/")]
 fn index() -> content::RawHtml<&'static str> {
     content::RawHtml("Hello 👋")
@@ -84,6 +75,14 @@ async fn get_devices() -> JsonResponse<Vec<String>> {
     Ok(Json(
         config.devices.iter().map(|x| x.name.clone()).collect(),
     ))
+}
+
+#[derive(Deserialize)]
+struct DownloadRequest {
+    url: String,
+    devices: Vec<String>,
+    fandom_override: Option<String>,
+    format: Option<DownloadFormat>,
 }
 
 #[post("/download", format = "json", data = "<request>")]
@@ -110,11 +109,14 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
         }
     };
 
-    let Some(device) = config.get_device_by_name(&request.device) else {
-        return (
-            Status::BadRequest,
-            format!("Could not find device {}", request.device),
-        );
+    let devices = match config.get_devices(request.devices) {
+        Ok(devices) => devices,
+        Err(device) => {
+            return (
+                Status::BadRequest,
+                format!("Could not find device {}", device),
+            )
+        }
     };
 
     let download_format = request.format.unwrap_or(config.default_format);
@@ -141,10 +143,16 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result = device
-                .client
-                .upload_work(&work, device, &config, download_format, None)
-                .await;
+            let upload_results: Vec<()> = devices
+                .into_iter()
+                .map(async |device| {
+                    device
+                        .client
+                        .upload_work(&work, device, &config, download_format, None)
+                        .await
+                })
+                .collect();
+
             let Ok(()) = upload_result else {
                 return (Status::BadRequest, upload_result.err().unwrap().to_string());
             };

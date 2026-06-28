@@ -1,9 +1,8 @@
-use crate::ao3::{
+use crate::{
     common::{filter_fandoms, get_page, sanitise_string, DownloadFormat},
-    series::Series,
-    user::User,
+    config::Config,
+    domain::{series::Series, user::User},
 };
-use crate::config::Config;
 
 use anyhow::{Context, Result};
 use derive_builder::Builder;

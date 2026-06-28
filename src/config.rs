@@ -1,10 +1,7 @@
-use crate::ao3::common::DownloadFormat;
-use crate::clients::{
-    client::Clients,
-    crosspoint::Crosspoint,
-    sftp::Sftp,
+use crate::{
+    clients::{client::Clients, crosspoint::Crosspoint, sftp::Sftp},
+    common::DownloadFormat,
 };
-
 use derive_builder::Builder;
 use directories::ProjectDirs;
 use indexmap::IndexMap;
@@ -28,10 +25,16 @@ pub struct Config {
     pub fandom_filter: IndexMap<String, Vec<String>>,
 }
 
-
 impl Config {
     pub fn get_device_by_name(&self, name: &str) -> Option<&Device> {
         self.devices.iter().find(|d| d.name == name)
+    }
+
+    pub fn get_devices(&self, names: Vec<String>) -> Result<Vec<&Device>, String> {
+        names
+            .into_iter()
+            .map(|x| self.get_device_by_name(&x).ok_or(x))
+            .collect()
     }
 }
 

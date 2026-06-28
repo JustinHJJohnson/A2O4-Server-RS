@@ -1,7 +1,4 @@
-use crate::{
-    ao3::user::User,
-    config::Config
-};
+use crate::{config::Config, domain::user::User};
 
 use anyhow::{Context, Error, Result};
 use enum_iterator::Sequence;
@@ -9,15 +6,23 @@ use regex::Regex;
 use reqwest::{Response, StatusCode};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    str::FromStr,
-};
+use std::{collections::HashSet, str::FromStr};
 use strum_macros::{Display, EnumString};
 use url::Url;
 
 #[derive(
-    Debug, Default, EnumString, PartialEq, Eq, Hash, Display, Sequence, Clone, Copy, Serialize, Deserialize,
+    Debug,
+    Default,
+    EnumString,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    Sequence,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
 )]
 pub enum DownloadFormat {
     AZW3,
@@ -167,11 +172,7 @@ pub fn filter_fandoms(fandoms: &Vec<String>, config: &Config) -> String {
     if mapped_and_filtered_fandoms.len() > 1 {
         "Multiple".to_string()
     } else {
-        mapped_and_filtered_fandoms
-            .iter()
-            .next()
-            .unwrap()
-            .clone()
+        mapped_and_filtered_fandoms.iter().next().unwrap().clone()
     }
 }
 

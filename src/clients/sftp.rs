@@ -1,6 +1,9 @@
-use crate::ao3::{common::DownloadFormat, series::Series, work::Work};
-use crate::clients::client::Client;
-use crate::config::{Config, Device};
+use crate::{
+    clients::client::Client,
+    common::DownloadFormat,
+    config::{Config, Device},
+    domain::{series::Series, work::Work},
+};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
