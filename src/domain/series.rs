@@ -203,10 +203,7 @@ impl Series {
             .replace(&[',', '.'][..], "")
             .parse()
             .unwrap_or_else(|_| panic!("Failed to convert {raw_num_works} to u32"));
-        let is_completed: bool = match raw_is_completed.as_str() {
-            "Yes" => true,
-            "No" | _ => false,
-        };
+        let is_completed: bool = matches!(raw_is_completed.as_str(), "Yes");
         let num_bookmarks: u32 = raw_num_bookmarks
             .replace(&[',', '.'][..], "")
             .parse()

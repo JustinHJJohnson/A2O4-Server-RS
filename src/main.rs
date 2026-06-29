@@ -109,7 +109,7 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
         }
     };
 
-    let devices = match config.get_devices(request.devices) {
+    let devices = match config.get_devices(request.devices.clone()) {
         Ok(devices) => devices,
         Err(device) => {
             return (
@@ -120,6 +120,16 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
     };
 
     let download_format = request.format.unwrap_or(config.default_format);
+
+    match user.write_cookies() {
+        Ok(()) => {}
+        Err(error) => {
+            return (
+                Status::InternalServerError,
+                format!("File error while writing cookies: {error}"),
+            )
+        }
+    }
 
     match url_info.page_type {
         PageType::Work => {
@@ -143,18 +153,18 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_results: Vec<()> = devices
-                .into_iter()
-                .map(async |device| {
-                    device
-                        .client
-                        .upload_work(&work, device, &config, download_format, None)
-                        .await
-                })
-                .collect();
-
-            let Ok(()) = upload_result else {
-                return (Status::BadRequest, upload_result.err().unwrap().to_string());
+            let upload_result = config
+                .upload_work_to_devices(&work, devices, download_format)
+                .await;
+            if let Some(error) = upload_result.failure {
+                return (
+                    Status::BadGateway,
+                    format!(
+                        "'{}'\nSuccessfully uploaded to device(s) '{}'",
+                        error,
+                        upload_result.successes.join(",")
+                    ),
+                );
             };
         }
         PageType::Series => {
@@ -171,23 +181,19 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result = device
-                .client
-                .upload_series(&series, device, &config, download_format)
+            let upload_result = config
+                .upload_series_to_devices(&series, devices, download_format)
                 .await;
-            let Ok(()) = upload_result else {
-                return (Status::BadRequest, upload_result.err().unwrap().to_string());
+            if let Some(error) = upload_result.failure {
+                return (
+                    Status::BadGateway,
+                    format!(
+                        "'{}'\nSuccessfully uploaded to device(s) '{}'",
+                        error,
+                        upload_result.successes.join(",")
+                    ),
+                );
             };
-        }
-    }
-
-    match user.write_cookies() {
-        Ok(()) => {}
-        Err(error) => {
-            return (
-                Status::InternalServerError,
-                format!("File error while writing cookies: {error}"),
-            )
         }
     }
 

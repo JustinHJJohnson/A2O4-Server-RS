@@ -1,6 +1,11 @@
 use crate::{
-    clients::{client::Clients, crosspoint::Crosspoint, sftp::Sftp},
+    clients::{
+        client::{Client, Clients},
+        crosspoint::Crosspoint,
+        sftp::Sftp,
+    },
     common::DownloadFormat,
+    domain::{series::Series, work::Work},
 };
 use derive_builder::Builder;
 use directories::ProjectDirs;
@@ -11,6 +16,11 @@ use std::{
     fs::{create_dir, File},
     io::Read,
 };
+
+pub struct UploadResult {
+    pub successes: Vec<String>,
+    pub failure: Option<String>,
+}
 
 #[derive(Builder, Debug, Default, Deserialize)]
 #[builder(default)]
@@ -35,6 +45,71 @@ impl Config {
             .into_iter()
             .map(|x| self.get_device_by_name(&x).ok_or(x))
             .collect()
+    }
+
+    //TODO think about if these should live here
+    pub async fn upload_work_to_devices(
+        &self,
+        work: &Work,
+        devices: Vec<&Device>,
+        download_format: DownloadFormat,
+    ) -> UploadResult {
+        let mut successful_uploads: Vec<String> = Vec::new();
+
+        for device in devices {
+            let result = device
+                .client
+                .upload_work(work, device, self, download_format, None);
+
+            if let Err(err) = result.await {
+                return UploadResult {
+                    successes: successful_uploads,
+                    failure: Some(format!(
+                        "Failed to upload to device \"'{}'\": '{}'",
+                        device.name, err
+                    )),
+                };
+            }
+
+            successful_uploads.push(device.name.clone());
+        }
+
+        UploadResult {
+            successes: successful_uploads,
+            failure: None,
+        }
+    }
+
+    pub async fn upload_series_to_devices(
+        &self,
+        series: &Series,
+        devices: Vec<&Device>,
+        download_format: DownloadFormat,
+    ) -> UploadResult {
+        let mut successful_uploads: Vec<String> = Vec::new();
+
+        for device in devices {
+            let result = device
+                .client
+                .upload_series(series, device, self, download_format);
+
+            if let Err(err) = result.await {
+                return UploadResult {
+                    successes: successful_uploads,
+                    failure: Some(format!(
+                        "Failed to upload to device \"'{}'\": '{}'",
+                        device.name, err
+                    )),
+                };
+            }
+
+            successful_uploads.push(device.name.clone());
+        }
+
+        UploadResult {
+            successes: successful_uploads,
+            failure: None,
+        }
     }
 }
 
