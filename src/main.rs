@@ -153,18 +153,11 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result = config
-                .upload_work_to_devices(&work, devices, download_format)
+            let upload_result = work
+                .upload_to_devices(&config, devices, download_format)
                 .await;
-            if let Some(error) = upload_result.failure {
-                return (
-                    Status::BadGateway,
-                    format!(
-                        "'{}'\nSuccessfully uploaded to device(s) '{}'",
-                        error,
-                        upload_result.successes.join(",")
-                    ),
-                );
+            if let Err(error) = upload_result {
+                return (Status::BadGateway, error.to_response_string());
             };
         }
         PageType::Series => {
@@ -181,18 +174,11 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                     download_result.err().unwrap().to_string(),
                 );
             };
-            let upload_result = config
-                .upload_series_to_devices(&series, devices, download_format)
+            let upload_result = series
+                .upload_to_devices(&config, devices, download_format)
                 .await;
-            if let Some(error) = upload_result.failure {
-                return (
-                    Status::BadGateway,
-                    format!(
-                        "'{}'\nSuccessfully uploaded to device(s) '{}'",
-                        error,
-                        upload_result.successes.join(",")
-                    ),
-                );
+            if let Err(error) = upload_result {
+                return (Status::BadGateway, error.to_response_string());
             };
         }
     }
@@ -218,7 +204,7 @@ struct UploadWorkRequest {
     fandom: String,
     series: Option<UploadWorkSeries>,
     part_in_series: Option<u8>,
-    device: String,
+    devices: Vec<String>,
 }
 
 #[post("/upload/work", format = "json", data = "<request>")]
@@ -233,11 +219,14 @@ async fn upload_work_api(request: Json<UploadWorkRequest>) -> (Status, String) {
         }
     };
 
-    let Some(device) = config.get_device_by_name(&request.device) else {
-        return (
-            Status::BadRequest,
-            format!("Could not find device {}", request.device),
-        );
+    let devices = match config.get_devices(request.devices.clone()) {
+        Ok(devices) => devices,
+        Err(device) => {
+            return (
+                Status::BadRequest,
+                format!("Could not find device {}", device),
+            )
+        }
     };
 
     let work = Work::test_work(
@@ -248,42 +237,34 @@ async fn upload_work_api(request: Json<UploadWorkRequest>) -> (Status, String) {
     );
 
     if let Some(unwrapped_series) = &request.series {
-        let dummy_series = Series::test_series(
+        let series = Series::test_series(
             &unwrapped_series.title,
             unwrapped_series.fandom.clone(),
             &config,
         )
         .unwrap();
-        let upload_result = device
-            .client
-            .upload_work(
-                &work,
-                device,
-                &config,
-                DownloadFormat::EPUB,
-                Some(&dummy_series),
-            )
+
+        let upload_result = series
+            .upload_to_devices(&config, devices, DownloadFormat::EPUB)
             .await;
-        let Ok(()) = upload_result else {
-            return (Status::BadRequest, upload_result.err().unwrap().to_string());
+        if let Err(error) = upload_result {
+            return (Status::BadGateway, error.to_response_string());
         };
     } else {
-        let upload_result = device
-            .client
-            .upload_work(&work, device, &config, DownloadFormat::EPUB, None)
+        let upload_result = work
+            .upload_to_devices(&config, devices, DownloadFormat::EPUB)
             .await;
-        let Ok(()) = upload_result else {
-            let error = upload_result.err().unwrap();
-            println!("{}", error.root_cause());
-            return (Status::BadRequest, error.to_string());
+        if let Err(error) = upload_result {
+            return (Status::BadGateway, error.to_response_string());
         };
     }
 
     (
         Status::Ok,
         format!(
-            "Successfully uploaded {} to {}",
-            request.work, request.device
+            "Successfully uploaded {} to devices: {}",
+            request.work,
+            request.devices.join(", ")
         ),
     )
 }

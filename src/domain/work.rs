@@ -1,6 +1,7 @@
 use crate::{
-    common::{filter_fandoms, get_page, sanitise_string, DownloadFormat},
-    config::Config,
+    clients::client::Client,
+    common::{filter_fandoms, get_page, sanitise_string, DownloadFormat, UploadError},
+    config::{Config, Device},
     domain::{series::Series, user::User},
 };
 
@@ -418,6 +419,36 @@ impl Work {
                 download_path.display()
             )
         })?;
+        Ok(())
+    }
+
+    pub async fn upload_to_devices(
+        &self,
+        config: &Config,
+        devices: Vec<&Device>,
+        download_format: DownloadFormat,
+    ) -> Result<(), UploadError> {
+        let mut successful_uploads: Vec<String> = Vec::new();
+
+        for device in devices {
+            println!("Uploading to device: {}", device.name);
+            let result = device
+                .client
+                .upload_work(self, device, config, download_format, None);
+
+            if let Err(err) = result.await {
+                return Err(UploadError {
+                    successes: successful_uploads,
+                    failure: format!(
+                        "Failed to upload to device \"'{}'\": '{}'",
+                        device.name, err
+                    ),
+                });
+            }
+
+            successful_uploads.push(device.name.clone());
+        }
+
         Ok(())
     }
 }

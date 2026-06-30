@@ -56,6 +56,21 @@ pub struct UrlInfo {
     pub id: String,
 }
 
+pub struct UploadError {
+    pub successes: Vec<String>,
+    pub failure: String,
+}
+
+impl UploadError {
+    pub fn to_response_string(&self) -> String {
+        format!(
+            "'{}'\nSuccessfully uploaded to device(s) '{}'",
+            self.failure,
+            self.successes.join(", ")
+        )
+    }
+}
+
 //TODO check for proxy error page, timeout page
 pub async fn get_page(id: &str, page: Option<u8>, user: &User) -> Result<Html> {
     let url = if let Some(i) = page {
