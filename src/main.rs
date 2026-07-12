@@ -1,6 +1,10 @@
+#[macro_use]
+extern crate rocket;
+
 mod clients;
 mod common;
 mod config;
+mod db;
 mod domain;
 
 use crate::{
@@ -12,12 +16,15 @@ use crate::{
 
 use epub::doc::EpubDoc;
 use rocket::{
-    fairing::{Fairing, Info, Kind},
+    error,
+    fairing::{self, Fairing, Info, Kind},
     http::{Header, Status},
+    info,
     response::content,
     serde::json::Json,
-    Request, Response, State,
+    Build, Request, Response, Rocket, State,
 };
+use rocket_db_pools::{sqlx, Connection, Database};
 use serde::Deserialize;
 use serde_json::to_string_pretty;
 use std::{
@@ -27,9 +34,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use url::Url;
-
-#[macro_use]
-extern crate rocket;
 
 pub struct CORS;
 
@@ -55,6 +59,12 @@ impl Fairing for CORS {
 
 #[get("/")]
 fn index() -> content::RawHtml<&'static str> {
+    content::RawHtml("Hello 👋")
+}
+
+#[get("/test")]
+async fn db_test(mut db: Connection<A2O4Db>) -> content::RawHtml<&'static str> {
+    _ = db::test_connection(db);
     content::RawHtml("Hello 👋")
 }
 
@@ -360,41 +370,72 @@ fn healthcheck() -> (Status, String) {
     (Status::Ok, "A2O4 is running".to_string())
 }
 
+#[derive(Database)]
+#[database("sqlite")]
+pub struct A2O4Db(sqlx::SqlitePool);
+
+async fn run_migrations(rocket: Rocket<Build>) -> rocket::fairing::Result {
+    match A2O4Db::fetch(&rocket) {
+        Some(db) => match sqlx::migrate!("./migrations").run(&**db).await {
+            Ok(_) => {
+                info!("SQLite database migrations completed successfully.");
+                Ok(rocket)
+            }
+            Err(e) => {
+                error!("SQLite database migration failed: {}", e);
+                Err(rocket)
+            }
+        },
+        None => {
+            error!("Failed to fetch the A2O4Db database pool from Rocket state.");
+            Err(rocket)
+        }
+    }
+}
+
 #[launch]
 async fn rocket() -> _ {
-    match read_config().await {
-        Ok(config) => {
-            // if need to sort out CORS https://github.com/lawliet89/rocket_cors/blob/master/examples/fairing.rs
-            let port = config.port;
-            let user = match user::get_user(config).await {
-                Ok(user) => user,
-                Err(error) => {
-                    eprintln!("User Error: {error}");
-                    std::process::exit(1);
-                }
-            };
-
-            rocket::build()
-                .configure(
-                    rocket::Config::figment()
-                        .merge(("port", port))
-                        .merge(("address", "0.0.0.0")),
-                )
-                .manage(user)
-                .attach(CORS)
-                .mount("/", routes![index])
-                .mount("/", routes![download])
-                .mount("/", routes![upload_series_api])
-                .mount("/", routes![upload_work_api])
-                .mount("/", routes![meta])
-                .mount("/", routes![healthcheck])
-                .mount("/", routes![get_devices])
-        }
+    let config = match read_config().await {
+        Ok(config) => config,
         Err(error) => {
             eprintln!("Config Error: {error}");
             std::process::exit(1)
         }
-    }
+    };
+    let port = config.port;
+    let user = match user::get_user(config.ao3_username, config.ao3_password).await {
+        Ok(user) => user,
+        Err(error) => {
+            eprintln!("User Error: {error}");
+            std::process::exit(1);
+        }
+    };
+
+    rocket::build()
+        .configure(
+            rocket::Config::figment()
+                .merge(("port", port))
+                .merge(("address", "0.0.0.0"))
+                .merge((
+                    "databases.sqlite.url",
+                    format!("sqlite://{}", config.db_path),
+                )),
+        )
+        .manage(user)
+        .attach(CORS)
+        .attach(A2O4Db::init())
+        .attach(fairing::AdHoc::try_on_ignite(
+            "SQLx Migrations",
+            run_migrations,
+        ))
+        .mount("/", routes![index])
+        .mount("/", routes![download])
+        .mount("/", routes![upload_series_api])
+        .mount("/", routes![upload_work_api])
+        .mount("/", routes![meta])
+        .mount("/", routes![healthcheck])
+        .mount("/", routes![get_devices])
+        .mount("/", routes![db_test])
 }
 
 /*fn write_epub_metadata_to_json() {

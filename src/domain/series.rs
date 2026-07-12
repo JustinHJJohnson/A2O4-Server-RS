@@ -21,7 +21,7 @@ use tokio::fs::create_dir;
 pub struct Series {
     pub id: String,
     pub title: String,
-    pub creator: String,
+    pub creators: Vec<String>,
     begun: String,   // TODO make some sort of date type
     updated: String, // TODO make some sort of date type
     description: String,
@@ -41,10 +41,10 @@ impl std::fmt::Display for Series {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "id: {}\ntitle: {}\ncreator: {}\nseries_begun: {}\nseries_updated: {}\ndescription: {}\nnum_words: {}\nnum_works: {}\nis_completed: {}\nnum_bookmarks: {}\nworks: {:?}\nauthors: {:?}\nfandoms: {:?}\nfiltered_fandoms: {:?}",
+            "id: {}\ntitle: {}\ncreators: {:?}\nseries_begun: {}\nseries_updated: {}\ndescription: {}\nnum_words: {}\nnum_works: {}\nis_completed: {}\nnum_bookmarks: {}\nworks: {:?}\nauthors: {:?}\nfandoms: {:?}\nfiltered_fandoms: {:?}",
             self.id,
             self.title,
-            self.creator,
+            self.creators,
             self.begun,
             self.updated,
             self.description,
@@ -67,7 +67,7 @@ impl Series {
         Ok(Series {
             id: "1".to_owned(),
             title: sanitise_string(title),
-            creator: "bob".to_owned(),
+            creators: vec!["bob".to_owned()],
             begun: "at some point".to_owned(),
             updated: "sure".to_owned(),
             description: "yes".to_owned(),
@@ -122,7 +122,7 @@ impl Series {
         let document = all_pages.first().unwrap();
 
         let title_selector = Selector::parse("h2.heading").expect("Failed to parse title");
-        let creator_selector =
+        let creators_selector =
             Selector::parse("dl.series.meta.group>dd>a").expect("Failed to parse creator");
         let anonymous_creator_selector =
             Selector::parse("dl.series.meta.group>dd").expect("Failed to parse creator");
@@ -141,8 +141,8 @@ impl Series {
         let mut series_date_select = document.select(&series_date_selector);
         series_date_select.next(); //Skip creator field to be picked up by different selector
 
-        let test = document.html();
-        println!("{test}");
+        // let test = document.html();
+        // println!("{test}");
 
         let title: String = document
             .select(&title_selector)
@@ -154,12 +154,18 @@ impl Series {
             .filter(|chunk| *chunk != "series")
             .collect::<Vec<&str>>()
             .join(" ");
-        let creator: String = document
-            .select(&creator_selector)
-            .next()
-            .unwrap_or(document.select(&anonymous_creator_selector).next().unwrap())
-            .text()
+        let mut creators: Vec<String> = document
+            .select(&creators_selector)
+            .map(|x| x.text().collect())
             .collect();
+        if creators.is_empty() {
+            creators = vec![document
+                .select(&anonymous_creator_selector)
+                .next()
+                .expect("Error parsing assumed anonymous author")
+                .text()
+                .collect()]
+        }
         let begun: String = series_date_select.next().unwrap().text().collect();
         let updated: String = series_date_select.next().unwrap().text().collect();
         let description: String = document
@@ -226,7 +232,7 @@ impl Series {
                 println!("  Found work {work_id}");
                 let parsed_work = Work::parse_work_from_blurb(work, &title, config)?;
                 fandoms.extend(parsed_work.fandoms.clone());
-                authors.insert(parsed_work.author.clone());
+                authors.extend(parsed_work.authors.clone());
                 works.push(parsed_work);
             }
         }
@@ -236,7 +242,7 @@ impl Series {
         Ok(Series {
             id: id.to_owned(),
             title: sanitise_string(&title),
-            creator,
+            creators,
             begun,
             updated,
             description,

@@ -85,14 +85,14 @@ pub trait Client {
         if let Some(unwrapped_series) = series {
             remote_file_path.push(unwrapped_series.filtered_fandom.clone());
             if unwrapped_series.filtered_fandom == "Original Work" {
-                remote_file_path.push(unwrapped_series.creator.clone());
+                remote_file_path.push(unwrapped_series.creators.first().unwrap().clone());
             }
             remote_file_path.push(unwrapped_series.title.clone());
         } else {
             let unwrapped_work = work.unwrap();
             remote_file_path.push(unwrapped_work.filtered_fandom.clone());
             if unwrapped_work.filtered_fandom == "Original Work" {
-                remote_file_path.push(unwrapped_work.author.clone());
+                remote_file_path.push(unwrapped_work.authors.first().unwrap().clone());
             }
         }
         if let Some(unwrapped_filename) = filename {

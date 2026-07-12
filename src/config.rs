@@ -12,11 +12,13 @@ use std::{
     io::Read,
 };
 
+//TODO consider setting up default values
 #[derive(Builder, Debug, Default, Deserialize)]
 #[builder(default)]
 pub struct Config {
     pub port: u16,
     pub download_path: String,
+    pub db_path: String,
     pub ao3_username: Option<String>,
     pub ao3_password: Option<String>,
     pub default_format: DownloadFormat,

@@ -17,12 +17,14 @@ reqwest = { version = "0.13.3", features = ["blocking", "cookies", "form", "mult
 reqwest_cookie_store = { version = "0.10.0", features = ["serde"] }
 reqwest-websocket = "0.6.0"
 rocket = { version = "0.5.1", features = ["json"] }
-scraper = { version = "0.22.0", features = ["atomic"] }
+rocket_db_pools = { version = "0.2", features = ["sqlx_sqlite"] }
+scraper = { version = "0.27.0", features = ["atomic"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.120"
+sqlx = { version = "0.7.3", features = ["runtime-tokio", "sqlite", "migrate"] }
 ssh2 = "0.9.4"
-strum = "0.26.3"
-strum_macros = "0.26.4"
+strum = "0.28.0"
+strum_macros = "0.28.0"
 tokio = { version = "1.41.1", features = ["fs"] }
-toml = "0.8.19"
+toml = { version = "1.1.2", features = ["preserve_order"] }
 url = "2.5.2"

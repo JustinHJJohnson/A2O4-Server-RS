@@ -7,3 +7,5 @@ Cargo.lock
 .vscode
 examples.txt
 *.html
+.direnv
+.envrc

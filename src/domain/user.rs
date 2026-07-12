@@ -3,10 +3,7 @@ use directories::ProjectDirs;
 use regex::Regex;
 use reqwest::Client;
 use reqwest_cookie_store::CookieStoreMutex;
-use std::{
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 pub struct User {
     pub client: Client,
@@ -126,8 +123,8 @@ impl User {
     }
 }
 
-pub async fn get_user(config: Config) -> Result<User, String> {
-    if let (Some(username), Some(password)) = (&config.ao3_username, &config.ao3_password) {
+pub async fn get_user(username: Option<String>, password: Option<String>) -> Result<User, String> {
+    if let (Some(username), Some(password)) = (&username, &password) {
         match User::new(username, password).await {
             Ok(user) => Ok(user),
             Err(error) => Err(format!("User Error {error}")),

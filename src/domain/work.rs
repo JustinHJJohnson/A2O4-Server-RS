@@ -23,7 +23,7 @@ pub struct SeriesLink {
 pub struct Work {
     pub id: String,
     pub title: String,
-    pub author: String,
+    pub authors: Vec<String>,
     pub download_links: HashMap<DownloadFormat, String>,
     pub fandoms: Vec<String>,
     pub filtered_fandom: String,
@@ -37,10 +37,10 @@ impl std::fmt::Display for Work {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "id: {},\ntitle: {},\nauthor: {},\ndownload_links: {:?},\nfandoms: {:?},\nfiltered_fandoms: {:?},\nrelationships: {:?},\ncharacters: {:?},\nadditional_tags: {:?}\nseries: {:?}",
+            "id: {},\ntitle: {},\nauthors: {:?},\ndownload_links: {:?},\nfandoms: {:?},\nfiltered_fandoms: {:?},\nrelationships: {:?},\ncharacters: {:?},\nadditional_tags: {:?}\nseries: {:?}",
             self.id,
             self.title,
-            self.author,
+            self.authors,
             self.download_links,
             self.fandoms,
             self.filtered_fandom,
@@ -63,7 +63,7 @@ impl Work {
             None => Self {
                 id: "1".to_owned(),
                 title,
-                author: String::new(),
+                authors: vec![String::new()],
                 download_links: HashMap::default(),
                 fandoms: vec![],
                 filtered_fandom: fandom,
@@ -75,7 +75,7 @@ impl Work {
             Some(unwrapped_series) => Self {
                 id: "1".to_owned(),
                 title,
-                author: String::new(),
+                authors: vec![String::new()],
                 download_links: HashMap::default(),
                 fandoms: vec![],
                 filtered_fandom: fandom,
@@ -128,7 +128,8 @@ impl Work {
         println!("Got AO3 response");
 
         let title_selector = Selector::parse("h2.title.heading").expect("Error parsing title");
-        let author_selector = Selector::parse("h3.byline.heading>a").expect("Error parsing author");
+        let authors_selector =
+            Selector::parse("h3.byline.heading>a").expect("Error parsing author");
         let anonymous_author_selector =
             Selector::parse("h3.byline.heading").expect("Error parsing author");
         let downloads_selector =
@@ -147,19 +148,24 @@ impl Work {
         let test = document.html();
         println!("{test}");
 
-        //TODO check for ssl error
         let title: String = document
             .select(&title_selector)
             .next()
             .with_context(|| format!("Could not find title for work {id}"))?
             .text()
             .collect();
-        let author: String = document
-            .select(&author_selector)
-            .next()
-            .unwrap_or(document.select(&anonymous_author_selector).next().unwrap())
-            .text()
+        let mut authors: Vec<String> = document
+            .select(&authors_selector)
+            .map(|x| x.text().collect())
             .collect();
+        if authors.is_empty() {
+            authors = vec![document
+                .select(&anonymous_author_selector)
+                .next()
+                .expect("Error parsing assumed anonymous author")
+                .text()
+                .collect()]
+        };
         let downloads_popup = document.select(&downloads_selector);
         let download_links: HashMap<DownloadFormat, String> = downloads_popup
             .map(|link| {
@@ -233,7 +239,7 @@ impl Work {
         Ok(Work {
             id: id.to_owned(),
             title: sanitise_string(&title),
-            author,
+            authors,
             download_links,
             fandoms: fandoms.clone(),
             filtered_fandom: match fandom_override {
@@ -276,11 +282,11 @@ impl Work {
 
         println!("  Parsing work {id} - {title}");
 
-        let author: String = if let Some(element) = heading.next() {
-            element.text().collect()
-        } else {
-            "Anonymous".to_owned() //TODO use a proper selector for this
-        };
+        let mut authors: Vec<String> = heading.map(|x| x.text().collect()).collect();
+        if authors.is_empty() {
+            authors = vec!["Anonymous".to_owned()]
+        }
+
         let download_links: HashMap<DownloadFormat, String> =
             enum_iterator::all::<DownloadFormat>()
                 .map(|download_format| {
@@ -348,7 +354,7 @@ impl Work {
         Ok(Work {
             id: id.clone(),
             title: sanitise_string(&title),
-            author,
+            authors,
             download_links,
             fandoms: fandoms.clone(),
             filtered_fandom: filter_fandoms(&fandoms, config),
