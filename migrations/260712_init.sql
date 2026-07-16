@@ -18,13 +18,13 @@ CREATE TABLE IF NOT EXISTS "series" (
 
 CREATE TABLE IF NOT EXISTS "author" (
   "id" INTEGER PRIMARY KEY,
-  "name" TEXT NOT NULL
+  "name" TEXT UNIQUE NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "tag" (
   "id" INTEGER PRIMARY KEY,
   "type" TEXT NOT NULL,
-  "name" TEXT NOT NULL
+  "name" TEXT UNIQUE NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "work_author_link" (
@@ -55,5 +55,6 @@ CREATE TABLE IF NOT EXISTS "upload_queue" (
 	"id" INTEGER PRIMARY KEY,
   "type" TEXT NOT NULL,
   "device" TEXT NOT NULL,
-  "id_to_upload" INTEGER NOT NULL
+  "id_to_upload" INTEGER NOT NULL,
+  UNIQUE("type", "device", "id_to_upload")
 );

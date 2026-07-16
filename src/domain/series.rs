@@ -22,13 +22,13 @@ pub struct Series {
     pub id: String,
     pub title: String,
     pub creators: Vec<String>,
-    begun: String,   // TODO make some sort of date type
-    updated: String, // TODO make some sort of date type
-    description: String,
-    num_words: u32,
-    num_works: u32,
-    is_completed: bool,
-    num_bookmarks: u32,
+    pub begun: String,   // TODO make some sort of date type
+    pub updated: String, // TODO make some sort of date type
+    pub description: String,
+    pub num_words: u32,
+    pub num_works: u32,
+    pub is_completed: bool,
+    pub num_bookmarks: u32,
 
     //These are gotten from parsing all the works in the series
     pub works: Vec<Work>,

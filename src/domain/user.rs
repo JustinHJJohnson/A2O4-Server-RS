@@ -1,9 +1,9 @@
 use crate::config::Config;
 use directories::ProjectDirs;
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{header, Client};
 use reqwest_cookie_store::CookieStoreMutex;
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
 pub struct User {
     pub client: Client,
@@ -115,9 +115,23 @@ impl User {
     }
 
     fn build_client(cookie_store: Arc<CookieStoreMutex>) -> Client {
+        let mut headers = header::HeaderMap::new();
+        headers.insert(
+            header::ACCEPT,
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(header::ACCEPT_LANGUAGE, "en-US,en;q=0.5".parse().unwrap());
+        headers.insert(header::REFERER, "https://google.com".parse().unwrap());
+
         Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
-            .user_agent("A2O4_Server/1.0")
+            //.user_agent("A2O4_Server/1.0")
+            .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0")
+            .default_headers(headers)
+            .use_native_tls()
+            .timeout(Duration::from_secs(10))
             .build()
             .unwrap()
     }

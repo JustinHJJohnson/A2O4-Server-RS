@@ -62,12 +62,6 @@ fn index() -> content::RawHtml<&'static str> {
     content::RawHtml("Hello 👋")
 }
 
-#[get("/test")]
-async fn db_test(mut db: Connection<A2O4Db>) -> content::RawHtml<&'static str> {
-    _ = db::test_connection(db);
-    content::RawHtml("Hello 👋")
-}
-
 type JsonResponse<T> = Result<Json<T>, (Status, String)>;
 
 #[get("/devices")]
@@ -96,7 +90,11 @@ struct DownloadRequest {
 }
 
 #[post("/download", format = "json", data = "<request>")]
-async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (Status, String) {
+async fn download(
+    request: Json<DownloadRequest>,
+    mut db: Connection<A2O4Db>,
+    user: &State<user::User>,
+) -> (Status, String) {
     let Ok(url) = Url::parse(&request.url) else {
         return (
             Status::BadRequest,
@@ -161,6 +159,13 @@ async fn download(request: Json<DownloadRequest>, user: &State<user::User>) -> (
                 return (
                     Status::BadRequest,
                     download_result.err().unwrap().to_string(),
+                );
+            };
+            let db_insert_result = db::insert_work(&mut **db, &work).await;
+            let Ok(()) = db_insert_result else {
+                return (
+                    Status::InternalServerError,
+                    db_insert_result.err().unwrap().to_string(),
                 );
             };
             let upload_result = work
@@ -435,7 +440,6 @@ async fn rocket() -> _ {
         .mount("/", routes![meta])
         .mount("/", routes![healthcheck])
         .mount("/", routes![get_devices])
-        .mount("/", routes![db_test])
 }
 
 /*fn write_epub_metadata_to_json() {

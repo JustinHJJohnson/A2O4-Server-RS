@@ -13,7 +13,7 @@ enum-iterator = "2.1.0"
 epub = "2.1.4"
 indexmap = "2.2.6"
 regex = "1.11.1"
-reqwest = { version = "0.13.3", features = ["blocking", "cookies", "form", "multipart", "stream"] }
+reqwest = { version = "0.13.3", features = ["blocking", "cookies", "form", "multipart", "native-tls", "stream"] }
 reqwest_cookie_store = { version = "0.10.0", features = ["serde"] }
 reqwest-websocket = "0.6.0"
 rocket = { version = "0.5.1", features = ["json"] }
