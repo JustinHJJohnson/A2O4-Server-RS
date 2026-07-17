@@ -4,7 +4,7 @@ use crate::{
 };
 
 use rocket_db_pools::{sqlx, Connection};
-use sqlx::{Acquire, Execute, QueryBuilder, Sqlite, SqliteConnection};
+use sqlx::{Acquire, QueryBuilder, Sqlite, SqliteConnection};
 use strum_macros::{Display, EnumString};
 
 #[derive(Display, EnumString)]
@@ -95,14 +95,10 @@ async fn insert_work_series_link(
         QueryBuilder::new("INSERT OR IGNORE INTO work_series_link (work, series) ");
 
     query_builder.push_values(works, |mut query, work| {
-        query.push_bind(&work.title).push_bind(series_id);
+        query.push_bind(&work.id).push_bind(series_id);
     });
 
-    let test = query_builder.build();
-
-    println!("{}", test.sql());
-
-    test.execute(tx).await?;
+    query_builder.build().execute(tx).await?;
 
     Ok(())
 }
@@ -122,11 +118,7 @@ async fn insert_authors(
         .push(" ON CONFLICT(name) DO UPDATE SET name=excluded.name")
         .push(" RETURNING id");
 
-    let test = query_builder.build_query_scalar();
-
-    println!("{}", test.sql());
-
-    let ids: Vec<i64> = test.fetch_all(tx).await?;
+    let ids: Vec<i64> = query_builder.build_query_scalar().fetch_all(tx).await?;
 
     Ok(ids)
 }
@@ -143,11 +135,7 @@ async fn insert_work_author_link(
         query.push_bind(work_id).push_bind(author);
     });
 
-    let test = query_builder.build();
-
-    println!("{}", test.sql());
-
-    test.execute(tx).await?;
+    query_builder.build().execute(tx).await?;
 
     Ok(())
 }

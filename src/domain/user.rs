@@ -1,4 +1,3 @@
-use crate::config::Config;
 use directories::ProjectDirs;
 use regex::Regex;
 use reqwest::{header, Client};
