@@ -123,7 +123,12 @@ async fn rocket() -> _ {
         }
     };
     let port = config.port;
-    let user = match domain::user::get_user(config.ao3_username, config.ao3_password).await {
+    let user = match domain::user::get_user(
+        config.ao3_username.clone(),
+        config.ao3_password.clone(),
+    )
+    .await
+    {
         Ok(user) => user,
         Err(error) => {
             eprintln!("User Error: {error}");
@@ -142,6 +147,7 @@ async fn rocket() -> _ {
                 )),
         )
         .manage(user)
+        .manage(config)
         .attach(CORS)
         .attach(A2O4Db::init())
         .attach(fairing::AdHoc::try_on_ignite(

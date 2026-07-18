@@ -25,6 +25,7 @@ pub async fn download(
     request: Json<DownloadRequest>,
     mut db: Connection<A2O4Db>,
     user: &State<user::User>,
+    config: &State<config::Config>,
 ) -> (Status, String) {
     let Ok(url) = Url::parse(&request.url) else {
         return (
@@ -36,16 +37,6 @@ pub async fn download(
     let url_info = match common::parse_url(&url) {
         Ok(url_info) => url_info,
         Err(error) => return (Status::BadRequest, error.to_string()),
-    };
-
-    let config = match config::read_config().await {
-        Ok(config) => config,
-        Err(error) => {
-            return (
-                Status::InternalServerError,
-                format!("Config Error: {error}"),
-            )
-        }
     };
 
     let devices = match config.get_devices(request.devices.clone()) {
@@ -73,8 +64,7 @@ pub async fn download(
     match url_info.page_type {
         PageType::Work => {
             let work_result =
-                Work::parse_work(&url_info.id, user, &config, request.fandom_override.clone())
-                    .await;
+                Work::parse_work(&url_info.id, user, config, request.fandom_override.clone()).await;
             let Ok(work) = work_result else {
                 return (Status::BadRequest, work_result.err().unwrap().to_string());
             };
@@ -100,14 +90,14 @@ pub async fn download(
                 );
             };
             let upload_result = work
-                .upload_to_devices(&config, devices, download_format)
+                .upload_to_devices(config, devices, download_format)
                 .await;
             if let Err(error) = upload_result {
                 return (Status::BadGateway, error.to_response_string());
             };
         }
         PageType::Series => {
-            let series_result = Series::parse_series(&url_info.id, user, &config).await;
+            let series_result = Series::parse_series(&url_info.id, user, config).await;
             let Ok(series) = series_result else {
                 return (Status::BadRequest, series_result.err().unwrap().to_string());
             };
@@ -128,7 +118,7 @@ pub async fn download(
                 );
             };
             let upload_result = series
-                .upload_to_devices(&config, devices, download_format)
+                .upload_to_devices(config, devices, download_format)
                 .await;
             if let Err(error) = upload_result {
                 return (Status::BadGateway, error.to_response_string());

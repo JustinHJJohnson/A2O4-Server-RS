@@ -1,4 +1,4 @@
-use rocket::{http::Status, serde::json::Json};
+use rocket::{http::Status, serde::json::Json, State};
 use serde::Deserialize;
 
 use crate::{
@@ -24,17 +24,10 @@ pub struct UploadWorkRequest {
 }
 
 #[post("/upload/work", format = "json", data = "<request>")]
-pub async fn upload_work(request: Json<UploadWorkRequest>) -> (Status, String) {
-    let config = match config::read_config().await {
-        Ok(config) => config,
-        Err(error) => {
-            return (
-                Status::InternalServerError,
-                format!("Config Error: {error}"),
-            )
-        }
-    };
-
+pub async fn upload_work(
+    request: Json<UploadWorkRequest>,
+    config: &State<config::Config>,
+) -> (Status, String) {
     let devices = match config.get_devices(request.devices.clone()) {
         Ok(devices) => devices,
         Err(device) => {
@@ -56,19 +49,19 @@ pub async fn upload_work(request: Json<UploadWorkRequest>) -> (Status, String) {
         let series = Series::test_series(
             &unwrapped_series.title,
             unwrapped_series.fandom.clone(),
-            &config,
+            config,
         )
         .unwrap();
 
         let upload_result = series
-            .upload_to_devices(&config, devices, DownloadFormat::EPUB)
+            .upload_to_devices(config, devices, DownloadFormat::EPUB)
             .await;
         if let Err(error) = upload_result {
             return (Status::BadGateway, error.to_response_string());
         };
     } else {
         let upload_result = work
-            .upload_to_devices(&config, devices, DownloadFormat::EPUB)
+            .upload_to_devices(config, devices, DownloadFormat::EPUB)
             .await;
         if let Err(error) = upload_result {
             return (Status::BadGateway, error.to_response_string());
@@ -93,17 +86,10 @@ pub struct UploadSeriesRequest {
 }
 
 #[post("/upload/series", format = "json", data = "<request>")]
-pub async fn upload_series(request: Json<UploadSeriesRequest>) -> (Status, String) {
-    let config = match config::read_config().await {
-        Ok(config) => config,
-        Err(error) => {
-            return (
-                Status::InternalServerError,
-                format!("Config Error: {error}"),
-            )
-        }
-    };
-
+pub async fn upload_series(
+    request: Json<UploadSeriesRequest>,
+    config: &State<config::Config>,
+) -> (Status, String) {
     let Some(device) = config.get_device_by_name(&request.device) else {
         return (
             Status::BadRequest,
@@ -111,7 +97,7 @@ pub async fn upload_series(request: Json<UploadSeriesRequest>) -> (Status, Strin
         );
     };
 
-    let series = match Series::test_series(&request.series, request.fandom.clone(), &config) {
+    let series = match Series::test_series(&request.series, request.fandom.clone(), config) {
         Ok(series) => series,
         Err(error) => {
             return (
@@ -123,7 +109,7 @@ pub async fn upload_series(request: Json<UploadSeriesRequest>) -> (Status, Strin
 
     let upload_result = device
         .client
-        .upload_series(&series, device, &config, DownloadFormat::EPUB)
+        .upload_series(&series, device, config, DownloadFormat::EPUB)
         .await;
     let Ok(()) = upload_result else {
         let error = upload_result.err().unwrap();
