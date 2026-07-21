@@ -8,7 +8,6 @@ mod db;
 mod domain;
 mod routes;
 
-use epub::doc::EpubDoc;
 use rocket::{
     error,
     fairing::{self, Fairing, Info, Kind},
@@ -18,14 +17,6 @@ use rocket::{
     Build, Request, Response, Rocket,
 };
 use rocket_db_pools::{sqlx, Database};
-use serde_json::to_string_pretty;
-use std::{
-    ffi::OsStr,
-    fs::{read_dir, File},
-    io::prelude::*,
-    path::{Path, PathBuf},
-};
-use url::Url;
 
 pub struct CORS;
 
@@ -53,37 +44,6 @@ impl Fairing for CORS {
 fn index() -> content::RawHtml<&'static str> {
     content::RawHtml("Hello 👋")
 }
-
-/*#[get("/meta")]
-fn meta() -> (Status, String) {
-    let mut doc = EpubDoc::new(PathBuf::from(
-        "downloads/Horny on Main Nikke/1 - I'll be by your side..epub",
-    ))
-    .unwrap();
-    //doc.go_next();
-    let test = doc.get_current().unwrap();
-    let a = test.0;
-    println!("{}", String::from_utf8(a).unwrap());
-    //println!("{}", doc.mdata("creator").unwrap().value);
-    //println!("{:?}", doc.metadata);
-
-    let files = read_dir("downloads").unwrap();
-    for file in files {
-        let file = file.unwrap();
-        let path = file.path();
-        if !path.is_dir() && path.extension() == Some(OsStr::new("epub")) {
-            let mut doc = EpubDoc::new(&path).unwrap();
-            //doc.go_next();
-            //doc.go_next();
-            let test = doc.get_current().unwrap();
-            //let mut metadata_file = File::create(path.with_extension("json")).unwrap();
-            //metadata_file.write_all(&to_string_pretty(&doc.metadata).unwrap().into_bytes()).unwrap();
-            println!("{}", String::from_utf8(test.0).unwrap());
-        }
-    }
-
-    (Status::Ok, "Ok".to_string())
-}*/
 
 #[get("/healthcheck")]
 fn healthcheck() -> (Status, String) {
@@ -158,21 +118,7 @@ async fn rocket() -> _ {
         .mount("/", routes![routes::download::download])
         .mount("/", routes![routes::upload::upload_work])
         .mount("/", routes![routes::upload::upload_series])
-        //.mount("/", routes![meta])
+        .mount("/", routes![routes::metadata::meta])
         .mount("/", routes![healthcheck])
         .mount("/", routes![routes::devices::get_devices])
 }
-
-/*fn write_epub_metadata_to_json() {
-    let files = read_dir("downloads").unwrap();
-    for file in files {
-        let file = file.unwrap();
-        let path = file.path();
-        if !path.is_dir() && path.extension() == Some(OsStr::new("epub")) {
-            let doc = EpubDoc::new(&path).unwrap();
-            //doc.metadata.insert()
-            let mut metadata_file = File::create(path.with_extension("json")).unwrap();
-            metadata_file.write_all(&to_string_pretty(&doc.metadata).unwrap().into_bytes()).unwrap();
-        }
-    }
-}*/

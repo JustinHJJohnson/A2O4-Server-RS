@@ -35,3 +35,7 @@ requests:
   device:
     method: GET
     url: "{{ host }}/devices"
+
+  meta:
+    method: GET
+    url: "{{ host }}/meta"

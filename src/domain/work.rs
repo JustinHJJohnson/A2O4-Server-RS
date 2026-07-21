@@ -18,6 +18,8 @@ pub struct SeriesLink {
     pub part_in_series: u8,
 }
 
+// For works downloaded as a series I could load the details missing from the series page from the epub
+// after download
 #[derive(Builder, Debug, Default, Clone)]
 #[builder(default)]
 pub struct Work {
