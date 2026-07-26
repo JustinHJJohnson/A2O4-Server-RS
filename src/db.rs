@@ -1,9 +1,9 @@
 use crate::{
+    config::Device,
     domain::{series::Series, work::Work},
-    A2O4Db,
 };
 
-use rocket_db_pools::{sqlx, Connection};
+use rocket_db_pools::sqlx;
 use sqlx::{Acquire, QueryBuilder, Sqlite, SqliteConnection};
 use strum_macros::{Display, EnumString};
 
@@ -56,7 +56,7 @@ where
     Ok(())
 }
 
-pub async fn insert_series(mut db: Connection<A2O4Db>, series: &Series) -> Result<(), sqlx::Error> {
+pub async fn insert_series(db: &mut SqliteConnection, series: &Series) -> Result<(), sqlx::Error> {
     let mut tx = db.begin().await?;
 
     sqlx::query("
@@ -195,6 +195,31 @@ async fn insert_work_tags_links(
     });
 
     query_builder.build().execute(tx).await?;
+
+    Ok(())
+}
+
+pub async fn insert_queue(
+    db: &mut SqliteConnection,
+    devices: Vec<&Device>,
+    is_work: bool,
+    id: String,
+) -> Result<(), sqlx::Error> {
+    if devices.is_empty() {
+        return Ok(());
+    }
+
+    let mut query_builder: QueryBuilder<Sqlite> =
+        QueryBuilder::new("INSERT INTO upload_queue (type, device, id_to_upload) ");
+
+    query_builder.push_values(devices, |mut query, device| {
+        query
+            .push_bind(if is_work { "work" } else { "series" })
+            .push_bind(device.name.clone())
+            .push_bind(id.clone());
+    });
+
+    query_builder.build().execute(db).await?;
 
     Ok(())
 }
