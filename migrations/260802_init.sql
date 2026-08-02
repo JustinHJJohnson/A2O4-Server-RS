@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS "work_author_link" (
 	FOREIGN KEY("work") REFERENCES "work"("id")
 );
 
+CREATE TABLE IF NOT EXISTS "series_author_link" (
+  "id" INTEGER PRIMARY KEY,
+  "series" INTEGER NOT NULL,
+  "author" INTEGER NOT NULL,
+  FOREIGN KEY("author") REFERENCES "author"("id"),
+  FOREIGN KEY("series") REFERENCES "series"("id")
+);
+
 CREATE TABLE IF NOT EXISTS "work_tag_link" (
 	"id" INTEGER PRIMARY KEY,
 	"work" INTEGER NOT NULL,
@@ -43,12 +51,20 @@ CREATE TABLE IF NOT EXISTS "work_tag_link" (
 	FOREIGN KEY("work") REFERENCES "work"("id")
 );
 
+CREATE TABLE IF NOT EXISTS "series_tag_link" (
+	"id" INTEGER PRIMARY KEY,
+	"series" INTEGER NOT NULL,
+	"tag" INTEGER NOT NULL,
+	FOREIGN KEY("tag") REFERENCES "tag"("id"),
+	FOREIGN KEY("series") REFERENCES "series"("id")
+);
+
 CREATE TABLE IF NOT EXISTS "work_series_link" (
 	"id" INTEGER PRIMARY KEY,
 	"work" INTEGER NOT NULL,
 	"series" INTEGER NOT NULL,
-	FOREIGN KEY("series") REFERENCES "series"("id"),
-	FOREIGN KEY("work") REFERENCES "work"("id")
+  "part_in_series" INTEGER NOT NULL,
+	UNIQUE("work", "series")
 );
 
 CREATE TABLE IF NOT EXISTS "upload_queue" (

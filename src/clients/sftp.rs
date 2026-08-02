@@ -76,7 +76,7 @@ fn upload_work_bulk(
     let filename = work.get_filename(download_format, series.map(|x| &x.id));
     let (file, size) = parent.get_file_with_size(work, series, &filename, &config.download_path)?;
 
-    println!("Starting to upload file: {}", &filename);
+    println!("Starting to upload file: {}", filename);
     println!("file is {size} bytes");
 
     let remote_file_path =
@@ -89,7 +89,7 @@ fn upload_work_bulk(
     let mut remote_file = sftp.create(Path::new(&remote_file_path)).with_context(|| {
         format!(
             "Failed to create remote file {} for work {}",
-            &remote_file_path.to_str().unwrap(),
+            remote_file_path.to_str().unwrap(),
             work.title
         )
     })?;

@@ -1,3 +1,5 @@
+use core::slice;
+
 use crate::{
     config::Device,
     domain::{series::Series, work::Work},
@@ -26,20 +28,17 @@ where
 {
     let mut tx = attachable.begin().await?;
 
-    println!("inserting work");
-    sqlx::query("INSERT INTO work (id, title, filtered_fandom) VALUES ($1, $2, $3)")
+    //TODO check if work is already downloaded before inserting
+    sqlx::query("INSERT OR IGNORE INTO work (id, title, filtered_fandom) VALUES ($1, $2, $3)")
         .bind(&work.id)
         .bind(&work.title)
         .bind(&work.filtered_fandom)
         .execute(&mut *tx)
         .await?;
 
-    println!("inserting authors");
     let author_ids = insert_authors(&mut tx, &work.authors).await?;
-    println!("inserting work author links");
     insert_work_author_link(&mut tx, &author_ids, &work.id).await?;
 
-    println!("inserting tags");
     let tag_ids = insert_tags(
         &mut tx,
         &work.fandoms,
@@ -48,8 +47,9 @@ where
         &work.additional_tags,
     )
     .await?;
-    println!("inserting work tag links");
     insert_work_tags_links(&mut tx, tag_ids, &work.id).await?;
+
+    insert_work_series_link(&mut tx, slice::from_ref(work)).await?;
 
     tx.commit().await?;
 
@@ -75,11 +75,24 @@ pub async fn insert_series(db: &mut SqliteConnection, series: &Series) -> Result
         .execute(&mut *tx)
         .await?;
 
+    let author_ids = insert_authors(&mut tx, &series.creators).await?;
+    insert_series_author_link(&mut tx, &author_ids, &series.id).await?;
+
+    let tag_ids = insert_tags(
+        &mut tx,
+        &series.fandoms.clone().into_iter().collect(),
+        &Vec::new(),
+        &Vec::new(),
+        &Vec::new(),
+    )
+    .await?;
+    insert_series_tags_links(&mut tx, tag_ids, &series.id).await?;
+
     for work in &series.works {
         insert_work(&mut tx, work).await?;
     }
 
-    insert_work_series_link(&mut tx, &series.works, &series.id).await?;
+    insert_work_series_link(&mut tx, &series.works).await?;
 
     tx.commit().await?;
 
@@ -88,14 +101,21 @@ pub async fn insert_series(db: &mut SqliteConnection, series: &Series) -> Result
 
 async fn insert_work_series_link(
     tx: &mut SqliteConnection,
-    works: &Vec<Work>,
-    series_id: &str,
+    works: &[Work],
 ) -> Result<(), sqlx::Error> {
-    let mut query_builder: QueryBuilder<Sqlite> =
-        QueryBuilder::new("INSERT OR IGNORE INTO work_series_link (work, series) ");
+    let series_work_links: Vec<(&String, &SeriesLink)> = works
+        .iter()
+        .flat_map(|work| work.series.values().map(|link| (&work.title, link)))
+        .collect();
 
-    query_builder.push_values(works, |mut query, work| {
-        query.push_bind(&work.id).push_bind(series_id);
+    let mut query_builder: QueryBuilder<Sqlite> =
+        QueryBuilder::new("INSERT OR IGNORE INTO work_series_link (work, series, part_in_series) ");
+
+    query_builder.push_values(series_work_links, |mut query, link| {
+        query
+            .push_bind(link.0)
+            .push_bind(&link.1.series_id)
+            .push_bind(link.1.part_in_series);
     });
 
     query_builder.build().execute(tx).await?;
@@ -133,6 +153,23 @@ async fn insert_work_author_link(
 
     query_builder.push_values(author_ids, |mut query, author| {
         query.push_bind(work_id).push_bind(author);
+    });
+
+    query_builder.build().execute(tx).await?;
+
+    Ok(())
+}
+
+async fn insert_series_author_link(
+    tx: &mut SqliteConnection,
+    author_ids: &Vec<i64>,
+    series_id: &str,
+) -> Result<(), sqlx::Error> {
+    let mut query_builder: QueryBuilder<Sqlite> =
+        QueryBuilder::new("INSERT OR IGNORE INTO series_author_link (series, author) ");
+
+    query_builder.push_values(author_ids, |mut query, author| {
+        query.push_bind(series_id).push_bind(author);
     });
 
     query_builder.build().execute(tx).await?;
@@ -192,6 +229,23 @@ async fn insert_work_tags_links(
 
     query_builder.push_values(tag_ids, |mut query, tag_id| {
         query.push_bind(work_id).push_bind(tag_id);
+    });
+
+    query_builder.build().execute(tx).await?;
+
+    Ok(())
+}
+
+async fn insert_series_tags_links(
+    tx: &mut SqliteConnection,
+    tag_ids: Vec<i64>,
+    series_id: &str,
+) -> Result<(), sqlx::Error> {
+    let mut query_builder: QueryBuilder<Sqlite> =
+        QueryBuilder::new("INSERT OR IGNORE INTO series_tag_link (series, tag) ");
+
+    query_builder.push_values(tag_ids, |mut query, tag_id| {
+        query.push_bind(series_id).push_bind(tag_id);
     });
 
     query_builder.build().execute(tx).await?;

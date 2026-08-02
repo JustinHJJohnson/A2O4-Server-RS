@@ -33,7 +33,7 @@ pub struct Series {
     //These are gotten from parsing all the works in the series
     pub works: Vec<Work>,
     authors: HashSet<String>,
-    fandoms: HashSet<String>,
+    pub fandoms: HashSet<String>,
     pub filtered_fandom: String,
 }
 
